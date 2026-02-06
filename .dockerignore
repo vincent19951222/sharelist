@@ -1,0 +1,10 @@
+node_modules
+.git
+.next
+__pycache__
+.env
+.env.local
+.venv
+dist
+build
+npm-debug.log

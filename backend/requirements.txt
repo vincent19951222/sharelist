@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+websockets
+pydantic
+python-dotenv
+sqlmodel
+asyncpg
+alembic
+bleach

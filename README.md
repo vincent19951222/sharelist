@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ShareList (Room Todo)
 
-## Getting Started
+A real-time collaborative checklist app featuring **Instant Rooms**, **No Login Required**, and **Minimalist Auth**. Built with Next.js 16 and FastAPI.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+*   **Instant Collaboration**: Create a room, share the link, and sync checklists in real-time.
+*   **Task Priorities**: Assign priority levels (High/Medium/Low) to tasks with visual indicators and filtering.
+*   **Private Invite Auth**:
+    *   **Admin**: Create room -> Get Admin Token -> Full control (Rename, Clear Done, Reset Invite).
+    *   **Member**: Join via invite link or code -> Edit items only.
+    *   **Note**: `roomId` is not an invite. A valid token is required to enter a room.
+*   **Persistent Storage**: Powered by Supabase PostgreSQL (Asyncpg + SQLModel).
+*   **System Hardening**:
+    *   Idempotency checks (no double-posts).
+    *   Connection keep-alive & auto-reconnect.
+    *   Auto-cleanup for expired rooms (24h TTL).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+*   **Frontend**: Next.js 16 (App Router), TypeScript, Tailwind CSS, Shadcn/ui.
+*   **Backend**: Python 3.11, FastAPI, WebSockets, SQLModel.
+*   **Database**: Supabase PostgreSQL (Session Pooler).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Getting Started (Local Development)
 
-## Learn More
+1.  **Install Dependencies**:
+    ```bash
+    npm run install:all
+    ```
 
-To learn more about Next.js, take a look at the following resources:
+2.  **Setup Environment**:
+    *   Create `backend/.env` with your Supabase connection string.
+    *   (See `docs/STARTUP_GUIDE.md` for details).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
+    *   Frontend: http://localhost:3000
+    *   Backend: http://localhost:8000
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment (Docker)
 
-## Deploy on Vercel
+Deploy the entire stack with one command.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1.  **Build and Run**:
+    ```bash
+    docker-compose up --build -d
+    ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2.  **Access**:
+    Open http://localhost:3000 in your browser.
+
+> **Note**: If deploying to a remote server, update `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` in `docker-compose.yml` to your server's IP/Domain, and rebuild.
+
+## Documentation
+
+*   [Event Protocol](./docs/EVENT_PROTOCOL.md)
+*   [QA Checklist](./docs/QA_CHECKLIST.md)
+*   [Development Log](./log.md)
