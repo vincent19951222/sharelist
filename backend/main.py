@@ -1,8 +1,8 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Tuple
 import asyncio
-import json
+import os
 import time
 from uuid import uuid4
 from collections import deque
@@ -16,16 +16,26 @@ from sqlalchemy.exc import IntegrityError
 from .database import init_db, get_db, async_session
 from .models import Room, TodoItem, RoomCreate
 from .logger import logger, LogContext
-from .errors import ErrorCode, AppError
+from .errors import ErrorCode
 from .telemetry import metrics
 from .security import sanitize_text, rate_limiter
 
 app = FastAPI()
 
+cors_allow_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if origin.strip()
+]
+cors_allow_credentials = "*" not in cors_allow_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_allow_origins,
+    allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -52,7 +62,7 @@ VALID_PRIORITIES = {"high", "medium", "low"}
 def validate_priority(priority: Optional[str]) -> str:
     """
     Validate and return priority value.
-    Defaults to 'medium' if None or invalid.
+    Defaults to 'medium' if None.
     Raises ValueError if invalid priority is provided.
     """
     if priority is None:
@@ -63,6 +73,41 @@ def validate_priority(priority: Optional[str]) -> str:
 
 # In-memory Idempotency Cache (per room)
 room_event_cache: Dict[str, deque] = {}
+
+def parse_event_message(data: dict) -> Tuple[Optional[str], Optional[dict], Optional[str]]:
+    """
+    Parse websocket message and safely extract event metadata.
+    Returns (event_type, payload_dict, client_event_id).
+    """
+    if not isinstance(data, dict):
+        return None, None, None
+    event_type = data.get("type")
+    payload = data.get("payload")
+    if not event_type or not isinstance(payload, dict):
+        return None, None, None
+    return event_type, payload, payload.get("clientEventId")
+
+def apply_item_edit(target: TodoItem, raw_text: Optional[str], priority: Optional[str], updated_at: int) -> bool:
+    """
+    Apply optional text/priority updates to a TodoItem.
+    Returns True when any field changes.
+    """
+    updated = False
+
+    # Only update text when a non-empty value is provided after sanitization.
+    if raw_text is not None:
+        text = sanitize_text(raw_text)
+        if text and target.text != text:
+            target.text = text[:MAX_ITEM_LENGTH]
+            target.updatedAt = updated_at
+            updated = True
+
+    if priority is not None and target.priority != priority:
+        target.priority = priority
+        target.updatedAt = updated_at
+        updated = True
+
+    return updated
 
 # Connection Manager
 class ConnectionManager:
@@ -363,10 +408,7 @@ async def websocket_endpoint(
         try:
             while True:
                 data = await websocket.receive_json()
-                event_type = data.get("type")
-                payload = data.get("payload")
-                client_event_id = payload.get("clientEventId")
-
+                event_type, payload, client_event_id = parse_event_message(data)
                 if not event_type or not payload:
                     continue
                 
@@ -463,9 +505,6 @@ async def websocket_endpoint(
                         raw_text = payload.get("text")
                         raw_priority = payload.get("priority")
 
-                        # --- Security: Sanitization ---
-                        text = sanitize_text(raw_text)
-
                         # Priority validation (optional field)
                         priority = None
                         if raw_priority is not None:
@@ -479,22 +518,18 @@ async def websocket_endpoint(
                                 logger.warning("Invalid priority", extra={**log_extra, "priority": raw_priority})
                                 continue
 
-                        # Update text if provided
-                        if text:
-                            target = next((i for i in current_room.items if i.id == item_id), None)
-                            if target:
-                                if target.text != text:
-                                    target.text = text[:MAX_ITEM_LENGTH]
-                                    target.updatedAt = get_current_timestamp()
-                                    session.add(target)
-                                    updated = True
-                                # Update priority if provided
-                                if priority is not None and target.priority != priority:
-                                    target.priority = priority
-                                    target.updatedAt = get_current_timestamp()
-                                    session.add(target)
-                                    updated = True
-                                logger.info("Item edited", extra={**log_extra, "item_id": item_id, "has_priority": priority is not None})
+                        target = next((i for i in current_room.items if i.id == item_id), None)
+                        if target:
+                            changed = apply_item_edit(
+                                target=target,
+                                raw_text=raw_text,
+                                priority=priority,
+                                updated_at=get_current_timestamp(),
+                            )
+                            if changed:
+                                session.add(target)
+                                updated = True
+                            logger.info("Item edited", extra={**log_extra, "item_id": item_id, "has_priority": priority is not None})
 
                     elif event_type == "item_delete":
                         item_id = payload.get("itemId")

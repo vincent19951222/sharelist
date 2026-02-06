@@ -2,7 +2,11 @@
 Unit tests for priority validation
 """
 
+import os
 import pytest
+
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/sharelist_test")
+
 from backend.main import validate_priority
 
 

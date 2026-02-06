@@ -2,73 +2,103 @@
 
 ## 项目概览
 
-**ShareList** 是一个实时多人协同清单应用，主打“即开即用”的极简体验。用户无需登录，创建一个“房间”后，即可通过分享链接或房间码邀请朋友加入，实现在多台设备上实时同步待办事项（新增、勾选、编辑、删除）。
+**ShareList** 是一个实时多人协同清单应用，主打“即开即用”的极简体验。用户无需登录，创建房间后可通过**邀请链接或邀请码（token）**加入，多端实时同步待办事项（新增、勾选、编辑、删除）。
 
-项目采用 **Monorepo (单体仓库)** 结构，包含 Next.js 前端和 FastAPI 后端。
+当前项目已从 MVP 演进为 **Monorepo 全栈应用**（Next.js + FastAPI + PostgreSQL），具备基础权限控制、可靠性与可观测性。
 
 ## 技术栈
 
-*   **前端 (Frontend):** Next.js 16 (App Router), TypeScript, Tailwind CSS, Shadcn/ui。
-*   **后端 (Backend):** Python 3.8+, FastAPI, WebSockets, Pydantic。
-*   **数据存储:** 内存存储 (MVP 阶段)，为未来接入数据库预留了接口。
-*   **实时通信:** 原生 WebSockets，配合自定义 JSON 事件协议。
+* **前端 (Frontend):** Next.js 16 (App Router), TypeScript, Tailwind CSS, Shadcn/ui。
+* **后端 (Backend):** Python 3.11, FastAPI, WebSockets, SQLModel。
+* **数据存储:** PostgreSQL（异步驱动 `asyncpg`，通过 `DATABASE_URL` 配置）。
+* **实时通信:** 原生 WebSockets + 自定义 JSON 事件协议。
+* **数据清理:** 房间 24h 无活动自动清理（后台定时任务）。
 
 ## 架构与核心概念
 
 ### Monorepo 目录结构
-*   `frontend/`: 存放 Next.js 前端应用代码。
-*   `backend/`: 存放 Python FastAPI 后端服务代码。
-*   `package.json` (根目录): 项目编排脚本，用于统一启动和安装依赖。
+* `frontend/`: Next.js 前端应用。
+* `backend/`: FastAPI 后端服务（API + WebSocket + DB 访问）。
+* `docs/`: 协议、启动、测试与上线文档。
+* `package.json` (根目录): 统一安装、启动与测试脚本。
 
 ### 实时协同机制
-*   **通信模式:** 客户端与服务端通过 WebSocket 全双工通信。
-*   **状态管理:** 服务端作为“单一真相源 (Single Source of Truth)”，维护 `RoomState`。
-*   **快照策略 (Snapshot):** 连接建立或状态变更后，服务端会向所有客户端广播完整的房间状态快照。
-*   **系统加固 (System Hardening):**
-    *   **幂等性 (Idempotency):** 客户端所有写操作均携带 `clientEventId` (UUID)。服务端记录已处理的事件 ID，防止因网络重试导致的重复操作。
-    *   **版本控制:** 房间状态包含 `version` 字段，确保时序正确。
-    *   **安全限制:** 限制单房间人数 (50)、事项数量 (200) 及文本长度 (500) 以防止资源滥用。
-    *   **心跳保活:** 服务端定期发送 `ping`，客户端回复 `pong`，以此维护连接健康。
+* **单一真相源:** 服务端数据库状态为准。
+* **快照同步:** 连接建立与状态变更后，服务端广播 `snapshot`。
+* **幂等性:** 写操作需携带 `clientEventId`，服务端做事件去重。
+* **心跳保活:** 服务端发送 `ping`，客户端回 `pong`。
+* **权限模型:**
+  * `admin`: 创建者（可重命名、清理已完成、重置邀请）。
+  * `member`: 通过邀请加入（可编辑事项）。
+  * `guest`: 未授权，不可进入房间。
+
+### 系统加固
+* 房间人数上限（50）、事项上限（200）、文本长度上限（500）。
+* 输入清洗（`bleach`）防止 XSS。
+* 基础限流（按 `roomId:userName`）。
+* 指标统计与系统观测端点：`GET /sys/stats`。
 
 ## 构建与运行
 
 ### 前置要求
-*   Node.js v18+
-*   Python v3.8+
-*   `npm` 或 `yarn`
+* Node.js v18+
+* Python v3.11+
+* npm
 
-### 常用命令 (根目录)
+### 环境变量
+
+#### 后端：`backend/.env`
+* `DATABASE_URL`：必填，未配置时后端启动会失败。
+
+#### 前端：`frontend/.env.local`
+* `NEXT_PUBLIC_WS_URL`：WebSocket 地址，默认 `ws://localhost:8000`
+* `NEXT_PUBLIC_API_URL`：REST API 地址，默认 `http://localhost:8000`
+
+> 局域网真机测试时请改为本机 IP（例如 `ws://192.168.1.5:8000`）。
+
+### 常用命令（根目录）
 
 | 命令 | 说明 |
 | :--- | :--- |
-| `npm run install:all` | 一键安装所有依赖（前端 npm + 后端 pip）。 |
-| `npm run dev` | 并行启动前端 (localhost:3000) 和后端 (localhost:8000)。 |
+| `npm run install:all` | 安装根目录 + 前端 npm 依赖，并安装后端 Python 依赖。 |
+| `npm run dev` | 并行启动前端（3000）和后端（8000）。 |
 | `npm run dev --prefix frontend` | 单独启动前端。 |
-| `uvicorn backend.main:app --reload` | 单独启动后端。 |
-
-### 配置说明
-环境变量通过 `frontend/.env.local` 文件配置。
-
-*   `NEXT_PUBLIC_WS_URL`: WebSocket 服务地址 (默认为 `ws://localhost:8000`)。
-    *   **提示:** 在局域网真机测试时，请将其修改为本机的 IP 地址 (例如 `ws://192.168.1.5:8000`)。
+| `uvicorn backend.main:app --reload --port 8000` | 单独启动后端。 |
+| `pytest backend/tests/test_priority.py` | 后端单元测试。 |
+| `pytest tests/test_e2e.py` | 端到端测试（需本地服务已启动）。 |
+| `python tests/load_test.py` | 简易并发压测脚本。 |
 
 ## 关键目录说明
 
-*   **`backend/`**:
-    *   `main.py`: 后端核心文件，包含 FastAPI 应用入口、WebSocket 端点、内存存储逻辑及连接管理。
-    *   `requirements.txt`: Python 依赖列表。
-*   **`frontend/`**:
-    *   `src/app/room/[roomId]/page.tsx`: 核心房间页面，负责处理 WebSocket 连接、状态同步及 UI 渲染。
-    *   `src/lib/store.ts`: (遗留/备份) 本地存储工具函数。
-*   **`docs/`**:
-    *   `EVENT_PROTOCOL.md`: 前后端通信协议规范 (Add, Toggle, Edit, Delete, Snapshot, Ping/Pong)。
-    *   `STARTUP_GUIDE.md`: 项目启动与环境配置指南。
-    *   `QA_CHECKLIST.md`: 手工验收测试用例。
+* **`backend/`**
+  * `main.py`: API/WebSocket 入口、连接管理、事件处理、定时任务。
+  * `models.py`: `Room` / `TodoItem` 数据模型。
+  * `database.py`: 异步数据库引擎与 Session。
+  * `security.py`: 文本清洗与限流。
+  * `logger.py` / `telemetry.py`: 结构化日志与指标。
+* **`frontend/`**
+  * `src/app/page.tsx`: 首页（创建房间、加入房间、最近房间）。
+  * `src/app/room/[roomId]/page.tsx`: 房间核心页（WebSocket、状态同步、权限 UI）。
+  * `src/lib/api.ts`: 与后端 REST API 交互。
+  * `src/lib/store.ts`: 本地用户信息与最近房间缓存。
+* **`docs/`**
+  * `EVENT_PROTOCOL.md`: 前后端事件协议。
+  * `STARTUP_GUIDE.md`: 启动与环境配置。
+  * `QA_CHECKLIST.md`: 手工验收清单。
+  * `LAUNCH_READINESS.md` / `LAUNCH_NEXT_STEPS.md`: 上线准备与后续路线。
 
 ## 开发规范
 
-*   **协议先行:** 新增功能时，必须先在 `docs/EVENT_PROTOCOL.md` 中定义数据交换格式。
-*   **幂等性原则:** 客户端发起任何修改状态的请求，**必须**生成并携带 `clientEventId`。
-*   **防御性编程:** 后端必须对房间大小、并发数进行限制，防止服务崩溃。
-*   **样式规范:** 遵循现有的 Tailwind CSS 和 Shadcn/ui 设计风格。
-*   **日志记录:** 完成阶段性功能、修复 Bug 或新功能开发后，**必须**更新 `log.md` 文件。
+* **协议先行:** 新增事件/字段前，先更新 `docs/EVENT_PROTOCOL.md`。
+* **幂等性原则:** 所有状态写操作必须包含 `clientEventId`。
+* **权限清晰:** Admin-only 能力要在前端禁用态 + 后端强校验双保险。
+* **防御性编程:** 后端必须维持容量限制、输入校验、异常兜底。
+* **文档一致性:** 实现变更后同步更新 `README.md`、`docs/` 与本文件。
+* **日志记录:** 阶段性功能或修复完成后更新 `log.md`。
+
+## 常见风险点（开发时重点自检）
+
+* WebSocket 异常分支是否会导致无限重连或重复连接。
+* 事件 payload 缺失时是否会触发未捕获异常。
+* snapshot 字段变更后，前端类型与协议文档是否同步。
+* token 轮换后旧链接、Recent Rooms、RoomGate 的体验是否一致。

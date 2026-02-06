@@ -1,9 +1,11 @@
 fastapi
 uvicorn
 websockets
+nanoid
 pydantic
 python-dotenv
 sqlmodel
 asyncpg
 alembic
 bleach
+greenlet

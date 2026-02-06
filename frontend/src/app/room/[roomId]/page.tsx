@@ -77,6 +77,8 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const [bannerMessage, setBannerMessage] = useState<BannerMessage | null>(null);
   
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectWebSocketRef = useRef<(token: string) => void>(() => {});
 
   // 1. Initial Auth Check (URL -> State)
   useEffect(() => {
@@ -106,7 +108,15 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   // 3. WebSocket Connection
   const connectWebSocket = useCallback((token: string) => {
     if (!currentUser) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) return;
+
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
 
     const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
     const wsUrl = `${baseUrl}/ws/${roomId}/${currentUser}?token=${token}`;
@@ -121,6 +131,10 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       setIsReconnecting(false);
       setErrorState(null); // Clear errors on success
       setBannerMessage(null);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
 
     ws.onmessage = (event) => {
@@ -182,9 +196,16 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       
       // For network errors / server restart (1006), retry indefinitely
       setIsReconnecting(true);
-      setTimeout(() => connectWebSocket(token), 3000);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      reconnectTimerRef.current = setTimeout(() => connectWebSocketRef.current(token), 3000);
     };
   }, [currentUser, roomId]);
+
+  useEffect(() => {
+    connectWebSocketRef.current = connectWebSocket;
+  }, [connectWebSocket]);
 
   // Trigger connection when we have a token
   useEffect(() => {
@@ -193,9 +214,23 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     }
   }, [authToken, currentUser, isConnected, connectWebSocket]);
 
+  useEffect(() => {
+    return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
+
   // --- Actions ---
 
-  const sendEvent = (type: string, payload: any) => {
+  const sendEvent = (type: string, payload: Record<string, unknown>) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ 
         type, 

@@ -130,3 +130,30 @@
 ## Next Steps (待办规划)
 *   [ ] **更多功能**: 支持置顶、标签颜色等。
 *   [ ] **性能优化**: 引入 Redis 替代内存缓存 (如果需要水平扩展)。
+---
+
+## Phase 4.2: 工程上下文文档对齐 (AGENTS Sync)
+**时间**: 2026-02-06
+**目标**: 让 `AGENTS.md` 与当前实现保持一致，减少新协作者误判和上下文偏差。
+
+### 核心产出
+*   **技术栈对齐**: 明确后端已使用 PostgreSQL + SQLModel，不再是内存存储。
+*   **鉴权与协作机制对齐**: 补充 token 邀请模型、角色权限与快照同步策略。
+*   **运行与配置对齐**: 增补后端 `DATABASE_URL`、前端 `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL`。
+*   **测试入口补齐**: 增加单测、e2e、压测命令，便于快速验证改动。
+*   **风险自检清单**: 新增 WebSocket 异常、payload 边界、token 轮换一致性等高风险检查项。
+
+---
+
+## Phase 4.3: 稳定性缺陷修复与回归测试补齐
+**时间**: 2026-02-06
+**目标**: 修复 WebSocket 边界条件与重连生命周期问题，并补充对应测试。
+
+### 核心产出
+*   **WebSocket payload 防御性修复**: 增加 `parse_event_message`，统一处理缺失/非法 payload，避免 `payload=None` 时直接抛异常断连。
+*   **item_edit 逻辑修复**: 增加 `apply_item_edit`，支持“仅更新 priority”场景，避免被 `text` 分支短路。
+*   **前端重连生命周期修复**: 为重连定时器增加 `ref` 持有和卸载清理，避免重复重连和组件卸载后残留连接。
+*   **CORS 配置收敛**: 改为通过 `CORS_ALLOW_ORIGINS` 配置白名单，默认仅本地开发域名；`allow_credentials` 与通配符解耦。
+*   **测试补齐**:
+    *   新增 `backend/tests/test_event_handling.py`，覆盖 payload 缺失、`clientEventId` 提取、priority-only 编辑、CORS 默认值。
+    *   保持 `backend/tests/test_priority.py` 回归通过。
