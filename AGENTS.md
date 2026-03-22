@@ -1,105 +1,161 @@
-# ShareList (Room Todo) 项目上下文
+# ShareList 项目上下文
 
 ## 项目概览
 
-**ShareList** 是一个实时多人协同清单应用，主打“即开即用”的极简体验。用户无需登录，创建房间后可通过**邀请链接或邀请码（token）**加入，多端实时同步待办事项（新增、勾选、编辑、删除）。
+**ShareList** 当前是一个固定房间的 Room Quest 应用，不再是“即时建房 + 邀请加入”的协作清单。
 
-当前项目已从 MVP 演进为 **Monorepo 全栈应用**（Next.js + FastAPI + PostgreSQL），具备基础权限控制、可靠性与可观测性。
+第一版产品约束：
+
+- 固定房间：`9999`
+- 固定成员：`vincent`、`cindy`
+- 访问方式：入口页输入 `roomId + name`
+- 页面范围：
+  - `entry`
+  - `room`
+  - `auto quests`
+  - `profile`
 
 ## 技术栈
 
-* **前端 (Frontend):** Next.js 16 (App Router), TypeScript, Tailwind CSS, Shadcn/ui。
-* **后端 (Backend):** Python 3.11, FastAPI, WebSockets, SQLModel。
-* **数据存储:** 本地开发默认使用 SQLite（`sqlite+aiosqlite`）；远端部署保留 PostgreSQL / Supabase 路线（`asyncpg`，通过 `DATABASE_URL` 配置）。
-* **实时通信:** 原生 WebSockets + 自定义 JSON 事件协议。
-* **数据清理:** 房间 24h 无活动自动清理（后台定时任务）。
+- Frontend: Next.js 16, TypeScript, Tailwind CSS
+- Backend: FastAPI, WebSockets, SQLModel
+- Database:
+  - Local: SQLite (`sqlite+aiosqlite`)
+  - Remote: PostgreSQL / Supabase (`postgresql+asyncpg`)
 
-## 架构与核心概念
+## 核心业务概念
 
-### Monorepo 目录结构
-* `frontend/`: Next.js 前端应用。
-* `backend/`: FastAPI 后端服务（API + WebSocket + DB 访问）。
-* `docs/`: 协议、启动、测试与上线文档。
-* `package.json` (根目录): 统一安装、启动与测试脚本。
+### 访问控制
 
-### 实时协同机制
-* **单一真相源:** 服务端数据库状态为准。
-* **快照同步:** 连接建立与状态变更后，服务端广播 `snapshot`。
-* **幂等性:** 写操作需携带 `clientEventId`，服务端做事件去重。
-* **心跳保活:** 服务端发送 `ping`，客户端回 `pong`。
-* **权限模型:**
-  * `admin`: 创建者（可重命名、清理已完成、重置邀请）。
-  * `member`: 通过邀请加入（可编辑事项）。
-  * `guest`: 未授权，不可进入房间。
+- 不再使用 `adminToken / joinToken`
+- WebSocket 和 REST 都基于 `room_members` 校验访问关系
+- 当前 seed 用户都属于同一房间，角色都是 `admin`
 
-### 系统加固
-* 房间人数上限（50）、事项上限（200）、文本长度上限（500）。
-* 输入清洗（`bleach`）防止 XSS。
-* 基础限流（按 `roomId:userName`）。
-* 指标统计与系统观测端点：`GET /sys/stats`。
+### 实时快照
 
-## 构建与运行
+服务端 `snapshot` 返回：
 
-### 前置要求
-* Node.js v18+
-* Python v3.11+
-* npm
+- `room`
+- `currentUser`
+- `members`
+- `items`
+- `autoQuests`
+
+### Quest 体系
+
+- `manual quest`
+  - 房间页手动新增
+- `auto quest`
+  - 配置重复星期
+  - 用户进入房间时按上海时区懒生成当天实例
+
+### GP 积分
+
+- 每个任务都带 `reward_gp`
+- 完成任务：
+  - 写 `completed_by_user_id`
+  - 新增或激活一条 `gp_ledger`
+- 取消完成：
+  - 清空完成人和完成时间
+  - 当前有效流水写 `reversed_at`
+- Profile 页展示：
+  - `totalGp`
+  - `thisWeekGp`
+  - `thisMonthGp`
+  - `history`
+  - `rank`
+
+### Rank 规则
+
+- `C`: `0+`
+- `B`: `200+`
+- `A`: `600+`
+- `S`: `1200+`
+
+## 数据模型
+
+当前运行时核心表：
+
+- `rooms`
+  - `room_code`
+  - `title`
+  - `timezone`
+  - `is_seeded`
+  - `never_expires`
+- `users`
+  - `name`
+  - `display_name`
+  - `avatar_url`
+- `room_members`
+  - `room_id`
+  - `user_id`
+  - `role`
+- `todo_items`
+  - `title`
+  - `reward_gp`
+  - `source_type`
+  - `auto_quest_id`
+  - `scheduled_date`
+  - `created_by_user_id`
+  - `completed_by_user_id`
+  - `completed_at`
+  - `is_deleted`
+- `auto_quests`
+  - `title`
+  - `reward_gp`
+  - `repeat_mask`
+  - `is_enabled`
+  - `created_by_user_id`
+- `gp_ledger`
+  - `todo_item_id`
+  - `todo_title`
+  - `gp_delta`
+  - `awarded_at`
+  - `reversed_at`
+
+## 运行与启动
 
 ### 环境变量
 
-#### 后端：`backend/.env`
-* `DATABASE_URL`：必填。本地开发默认可用 `sqlite+aiosqlite:///./sharelist.db`；远端部署可切换到 PostgreSQL / Supabase 连接串。
+后端 `backend/.env`
 
-#### 前端：`frontend/.env.local`
-* `NEXT_PUBLIC_WS_URL`：WebSocket 地址，默认 `ws://localhost:8000`
-* `NEXT_PUBLIC_API_URL`：REST API 地址，默认 `http://localhost:8000`
+- `DATABASE_URL`
+- `CORS_ALLOW_ORIGINS`
 
-> 局域网真机测试时请改为本机 IP（例如 `ws://192.168.1.5:8000`）。
+前端 `frontend/.env.local`
 
-### 常用命令（根目录）
+- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_WS_URL`
+
+### 常用命令
 
 | 命令 | 说明 |
-| :--- | :--- |
-| `npm run install:all` | 安装根目录 + 前端 npm 依赖，并安装后端 Python 依赖。 |
-| `npm run dev` | 并行启动前端（3000）和后端（8000）。 |
-| `npm run dev --prefix frontend` | 单独启动前端。 |
-| `uvicorn backend.main:app --reload --port 8000` | 单独启动后端。 |
-| `pytest backend/tests/test_priority.py` | 后端单元测试。 |
-| `pytest tests/test_e2e.py` | 端到端测试（需本地服务已启动）。 |
-| `python tests/load_test.py` | 简易并发压测脚本。 |
-
-## 关键目录说明
-
-* **`backend/`**
-  * `main.py`: API/WebSocket 入口、连接管理、事件处理、定时任务。
-  * `models.py`: `Room` / `TodoItem` 数据模型。
-  * `database.py`: 异步数据库引擎与 Session。
-  * `security.py`: 文本清洗与限流。
-  * `logger.py` / `telemetry.py`: 结构化日志与指标。
-* **`frontend/`**
-  * `src/app/page.tsx`: 首页（创建房间、加入房间、最近房间）。
-  * `src/app/room/[roomId]/page.tsx`: 房间核心页（WebSocket、状态同步、权限 UI）。
-  * `src/lib/api.ts`: 与后端 REST API 交互。
-  * `src/lib/store.ts`: 本地用户信息与最近房间缓存。
-* **`docs/`**
-  * `EVENT_PROTOCOL.md`: 前后端事件协议。
-  * `STARTUP_GUIDE.md`: 启动与环境配置。
-  * `QA_CHECKLIST.md`: 手工验收清单。
-  * `LAUNCH_READINESS.md` / `LAUNCH_NEXT_STEPS.md`: 上线准备与后续路线。
+| --- | --- |
+| `npm run install:all` | 安装根目录、前端和后端依赖 |
+| `npm run dev` | 前端 `3333` + 后端 `8000` |
+| `npm run build --prefix frontend` | 前端生产构建 |
+| `backend/.venv/bin/python -m pytest backend/tests/test_event_handling.py backend/tests/test_priority.py` | 后端单测 |
+| `uvicorn backend.main:app --reload --port 8000` | 单独启动后端 |
 
 ## 开发规范
 
-* **协议先行:** 新增事件/字段前，先更新 `docs/EVENT_PROTOCOL.md`。
-* **幂等性原则:** 所有状态写操作必须包含 `clientEventId`。
-* **权限清晰:** Admin-only 能力要在前端禁用态 + 后端强校验双保险。
-* **防御性编程:** 后端必须维持容量限制、输入校验、异常兜底。
-* **文档一致性:** 实现变更后同步更新 `README.md`、`docs/` 与本文件。
-* **双数据库意识:** 本地默认按 SQLite 验证；涉及备份恢复、迁移脚本、部署说明时要明确哪些仅适用于 PostgreSQL / Supabase。
-* **日志记录:** 阶段性功能或修复完成后更新 `log.md`。
+- 协议变更先更新 `docs/EVENT_PROTOCOL.md`
+- 所有写事件必须带 `clientEventId`
+- 自动任务相关改动要同时检查：
+  - 当天懒生成是否重复
+  - 删除当天实例后是否被重新生成
+  - 取消完成是否正确回滚 GP
+- 文档同步：
+  - `README.md`
+  - `docs/STARTUP_GUIDE.md`
+  - `docs/EVENT_PROTOCOL.md`
+  - `log.md`
+- 阶段性完成后更新 `log.md`
 
-## 常见风险点（开发时重点自检）
+## 风险点
 
-* WebSocket 异常分支是否会导致无限重连或重复连接。
-* 事件 payload 缺失时是否会触发未捕获异常。
-* snapshot 字段变更后，前端类型与协议文档是否同步。
-* token 轮换后旧链接、Recent Rooms、RoomGate 的体验是否一致。
+- WebSocket 断线重连后是否重复连接
+- `snapshot` 字段变化后前端类型是否同步
+- Auto Quest 更新后当天实例是否需要同步刷新
+- 软删除是否阻止当天自动任务重复生成
+- GP 流水是否和任务完成/撤销严格对应
