@@ -10,7 +10,7 @@
 
 * **前端 (Frontend):** Next.js 16 (App Router), TypeScript, Tailwind CSS, Shadcn/ui。
 * **后端 (Backend):** Python 3.11, FastAPI, WebSockets, SQLModel。
-* **数据存储:** PostgreSQL（异步驱动 `asyncpg`，通过 `DATABASE_URL` 配置）。
+* **数据存储:** 本地开发默认使用 SQLite（`sqlite+aiosqlite`）；远端部署保留 PostgreSQL / Supabase 路线（`asyncpg`，通过 `DATABASE_URL` 配置）。
 * **实时通信:** 原生 WebSockets + 自定义 JSON 事件协议。
 * **数据清理:** 房间 24h 无活动自动清理（后台定时任务）。
 
@@ -48,7 +48,7 @@
 ### 环境变量
 
 #### 后端：`backend/.env`
-* `DATABASE_URL`：必填，未配置时后端启动会失败。
+* `DATABASE_URL`：必填。本地开发默认可用 `sqlite+aiosqlite:///./sharelist.db`；远端部署可切换到 PostgreSQL / Supabase 连接串。
 
 #### 前端：`frontend/.env.local`
 * `NEXT_PUBLIC_WS_URL`：WebSocket 地址，默认 `ws://localhost:8000`
@@ -94,6 +94,7 @@
 * **权限清晰:** Admin-only 能力要在前端禁用态 + 后端强校验双保险。
 * **防御性编程:** 后端必须维持容量限制、输入校验、异常兜底。
 * **文档一致性:** 实现变更后同步更新 `README.md`、`docs/` 与本文件。
+* **双数据库意识:** 本地默认按 SQLite 验证；涉及备份恢复、迁移脚本、部署说明时要明确哪些仅适用于 PostgreSQL / Supabase。
 * **日志记录:** 阶段性功能或修复完成后更新 `log.md`。
 
 ## 常见风险点（开发时重点自检）

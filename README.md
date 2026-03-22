@@ -10,7 +10,7 @@ A real-time collaborative checklist app featuring **Instant Rooms**, **No Login 
     *   **Admin**: Create room -> Get Admin Token -> Full control (Rename, Clear Done, Reset Invite).
     *   **Member**: Join via invite link or code -> Edit items only.
     *   **Note**: `roomId` is not an invite. A valid token is required to enter a room.
-*   **Persistent Storage**: Powered by Supabase PostgreSQL (Asyncpg + SQLModel).
+*   **Persistent Storage**: Local development defaults to SQLite; remote deployment can use Supabase PostgreSQL (Asyncpg + SQLModel).
 *   **System Hardening**:
     *   Idempotency checks (no double-posts).
     *   Connection keep-alive & auto-reconnect.
@@ -20,7 +20,9 @@ A real-time collaborative checklist app featuring **Instant Rooms**, **No Login 
 
 *   **Frontend**: Next.js 16 (App Router), TypeScript, Tailwind CSS, Shadcn/ui.
 *   **Backend**: Python 3.11, FastAPI, WebSockets, SQLModel.
-*   **Database**: Supabase PostgreSQL (Session Pooler).
+*   **Database**:
+    *   Local development: SQLite (`sqlite+aiosqlite`)
+    *   Remote deployment: PostgreSQL / Supabase (`postgresql+asyncpg`)
 
 ## Getting Started (Local Development)
 
@@ -30,8 +32,9 @@ A real-time collaborative checklist app featuring **Instant Rooms**, **No Login 
     ```
 
 2.  **Setup Environment**:
-    *   Create `backend/.env` with your Supabase connection string.
-    *   (See `docs/STARTUP_GUIDE.md` for details).
+    *   Copy `backend/.env.example` to `backend/.env` for local SQLite development.
+    *   Copy `frontend/.env.example` to `frontend/.env.local` if you need to customize frontend endpoints.
+    *   (See `docs/STARTUP_GUIDE.md` for local vs remote database details).
 
 3.  **Run Development Server**:
     ```bash
@@ -57,5 +60,6 @@ Deploy the entire stack with one command.
 ## Documentation
 
 *   [Event Protocol](./docs/EVENT_PROTOCOL.md)
+*   [Startup Guide](./docs/STARTUP_GUIDE.md)
 *   [QA Checklist](./docs/QA_CHECKLIST.md)
 *   [Development Log](./log.md)

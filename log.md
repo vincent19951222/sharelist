@@ -157,3 +157,20 @@
 *   **测试补齐**:
     *   新增 `backend/tests/test_event_handling.py`，覆盖 payload 缺失、`clientEventId` 提取、priority-only 编辑、CORS 默认值。
     *   保持 `backend/tests/test_priority.py` 回归通过。
+
+---
+
+## Phase 4.4: 本地 SQLite 开发基线与文档对齐
+**时间**: 2026-03-22
+**目标**: 明确“本地 SQLite / 远端 Supabase”双环境策略，减少开发与部署认知混乱。
+
+### 核心产出
+*   **本地默认环境切换**:
+    *   将 `backend/.env` 本地默认值切回 `sqlite+aiosqlite:///./sharelist.db`，确保本地开发零外部依赖。
+    *   新增 `backend/.env.example` 与 `frontend/.env.example`，提供本地开发默认示例。
+*   **文档统一**:
+    *   更新 `README.md` 与 `docs/STARTUP_GUIDE.md`，明确本地使用 SQLite，远端部署保留 Supabase / PostgreSQL 路线。
+    *   更新 `AGENTS.md`，避免协作者误以为本地开发必须依赖云数据库。
+*   **双数据库边界澄清**:
+    *   为 `scripts/db_tool.py` 增加显式提示，说明该脚本仅支持 PostgreSQL / Supabase，不适用于本地 SQLite。
+    *   在启动文档中补充迁移脚本与备份脚本的适用范围说明。

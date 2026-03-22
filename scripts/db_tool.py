@@ -32,6 +32,11 @@ def parse_db_url(url):
     Handles: postgresql+asyncpg://user:pass@host:port/dbname
     Returns: (user, password, host, port, dbname)
     """
+    if not url.startswith("postgresql"):
+        print("Error: scripts/db_tool.py only supports PostgreSQL-compatible DATABASE_URL values.")
+        print("Current DATABASE_URL does not look like PostgreSQL/Supabase. For local SQLite, skip backup/restore via this script.")
+        sys.exit(1)
+
     # Remove driver info (e.g., +asyncpg) for standard tools
     clean_url = re.sub(r'\+[\w]+://', '://', url)
     
