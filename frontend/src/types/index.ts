@@ -1,38 +1,83 @@
-export interface Member {
-  memberId: string;
-  name: string;
-  joinedAt: number;
+export type MemberRole = "admin" | "member";
+export type QuestSourceType = "manual" | "auto_quest";
+export type Priority = "high" | "medium" | "low";
+
+export interface RoomInfo {
+  roomId: string;
+  title: string;
+  timezone: string;
 }
 
-export type Priority = "high" | "medium" | "low";
+export interface RoomUser {
+  userId: string;
+  name: string;
+  displayName: string;
+  avatarUrl: string;
+}
+
+export interface Member extends RoomUser {
+  role: MemberRole;
+  isOnline: boolean;
+}
 
 export interface TodoItem {
   id: string;
-  text: string;
+  title: string;
   done: boolean;
-  doneBy: string | null;
-  priority?: Priority;  // Optional for backward compatibility
+  rewardGp: number;
+  sourceType: QuestSourceType;
+  autoQuestId: string | null;
+  scheduledDate: string | null;
+  createdBy: string | null;
+  completedBy: string | null;
+  completedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface Room {
-  roomId: string;
-  roomName: string;
+export interface AutoQuest {
+  id: string;
+  title: string;
+  rewardGp: number;
+  repeatDays: string[];
+  isEnabled: boolean;
+  createdBy: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface RoomSnapshot {
+  room: RoomInfo;
+  currentUser: Member;
+  members: Member[];
   items: TodoItem[];
+  autoQuests: AutoQuest[];
 }
 
-export interface RecentRoom {
+export interface LocalUser extends RoomUser {
   roomId: string;
-  roomName: string;
-  token?: string;
-  role?: 'admin' | 'member' | 'guest';
-  lastVisited: number;
+  role: MemberRole;
 }
 
-export interface LocalUser {
-  name: string;
-  recentRooms: RecentRoom[]; 
+export interface RoomAccessResponse {
+  room: RoomInfo;
+  user: Member;
+}
+
+export interface ProfileLedgerEntry {
+  id: string;
+  todoItemId: string;
+  todoTitle: string;
+  gpDelta: number;
+  awardedAt: number;
+}
+
+export interface ProfileSummary extends RoomUser {
+  rank: string;
+  totalGp: number;
+  thisWeekGp: number;
+  thisWeekCount: number;
+  thisMonthGp: number;
+  thisMonthCount: number;
+  history: ProfileLedgerEntry[];
 }
