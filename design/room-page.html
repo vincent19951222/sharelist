@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShareList Room Page</title>
+    <link rel="stylesheet" href="./styles/prototype.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="page page-room active">
+            <div class="header">
+                <div class="h-left">
+                    <div class="avatar-main">
+                        <img src="https://i.pravatar.cc/150?u=cat" alt="User Avatar">
+                        <div class="status-dot"></div>
+                    </div>
+                    <div class="title-box">
+                        <span class="t-sub">TITLE</span>
+                        <span class="t-main">我的房间</span>
+                    </div>
+                </div>
+
+                <div class="h-right">
+                    <div class="room-id">ID <span>#8X92</span></div>
+                    <div class="member-group">
+                        <img src="https://i.pravatar.cc/100?u=bear" alt="Bear">
+                        <img src="https://i.pravatar.cc/100?u=frog" alt="Frog">
+                        <div class="member-add">+</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="list-body">
+                <div class="section-bar">
+                    <div class="section-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        TODAY'S QUEST
+                    </div>
+                    <a class="section-link-chip" href="./auto-quest-page.html">
+                        <span class="section-link-dot"></span>
+                        Auto Quests
+                    </a>
+                </div>
+
+                <div class="task-list">
+                    <div class="task-card">
+                        <label class="checkbox-container">
+                            <input type="checkbox">
+                            <span class="checkmark"></span>
+                        </label>
+                        <div class="task-content">
+                            <div class="task-name">Buy almond milk</div>
+                            <div class="task-meta">Added by @PixelCat</div>
+                            <div class="task-gp"><div class="coin-icon"></div> +10 GP</div>
+                        </div>
+                    </div>
+
+                    <div class="task-card completed">
+                        <label class="checkbox-container">
+                            <input type="checkbox" checked>
+                            <span class="checkmark"></span>
+                        </label>
+                        <div class="task-content">
+                            <div class="task-name">Finish the project mockup</div>
+                            <div class="task-meta">Completed by @PixelBear</div>
+                            <div class="task-gp"><div class="coin-icon"></div> +10 GP</div>
+                        </div>
+                    </div>
+
+                    <div class="task-card active-editing">
+                        <label class="checkbox-container">
+                            <input type="checkbox">
+                            <span class="checkmark"></span>
+                        </label>
+                        <div class="task-content">
+                            <div class="task-name">Walk the dog</div>
+                            <div class="task-meta highlight">
+                                <img src="https://i.pravatar.cc/100?u=frog" alt="Frog">
+                                Frog is editing...
+                            </div>
+                        </div>
+                        <svg class="icon-trash" width="20" height="20" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                    </div>
+
+                    <div class="task-card">
+                        <label class="checkbox-container">
+                            <input type="checkbox">
+                            <span class="checkmark"></span>
+                        </label>
+                        <div class="task-content">
+                            <div class="task-name">Plan weekend trip</div>
+                            <div class="task-gp"><div class="coin-icon"></div> +25 GP</div>
+                            <div class="tag-fun">Fun</div>
+                        </div>
+                    </div>
+
+                    <div class="task-card">
+                        <label class="checkbox-container">
+                            <input type="checkbox">
+                            <span class="checkmark"></span>
+                        </label>
+                        <div class="task-content">
+                            <div class="task-name">Water plants</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bottom-bubble-container">
+                <div class="chat-bubble">
+                    <input type="text" class="bubble-input" placeholder="Laundry Day">
+                    <div class="bubble-divider"></div>
+                    <div class="bubble-actions">
+                        <div class="bubble-pills">
+                            <div class="reward-picker">
+                                <button class="b-pill pill-yellow reward-trigger" id="reward-trigger" type="button" aria-expanded="false" aria-controls="reward-menu">
+                                    <div class="coin-icon"></div>
+                                    Reward <b id="reward-value">10 GP</b>
+                                    <svg class="reward-caret" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </button>
+                                <div class="reward-menu" id="reward-menu" hidden>
+                                    <button class="reward-option" type="button" data-gp="10">10 GP</button>
+                                    <button class="reward-option" type="button" data-gp="20">20 GP</button>
+                                    <button class="reward-option" type="button" data-gp="30">30 GP</button>
+                                    <button class="reward-option" type="button" data-gp="40">40 GP</button>
+                                    <button class="reward-option" type="button" data-gp="50">50 GP</button>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn-add">
+                            <svg viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const rewardTrigger = document.getElementById("reward-trigger");
+        const rewardMenu = document.getElementById("reward-menu");
+        const rewardValue = document.getElementById("reward-value");
+        const rewardOptions = Array.from(document.querySelectorAll(".reward-option"));
+
+        function openRewardMenu() {
+            rewardMenu.hidden = false;
+            rewardTrigger.setAttribute("aria-expanded", "true");
+        }
+
+        function closeRewardMenu() {
+            rewardMenu.hidden = true;
+            rewardTrigger.setAttribute("aria-expanded", "false");
+        }
+
+        rewardTrigger.addEventListener("click", (event) => {
+            event.stopPropagation();
+
+            if (rewardMenu.hidden) {
+                openRewardMenu();
+                return;
+            }
+
+            closeRewardMenu();
+        });
+
+        rewardOptions.forEach((option) => {
+            option.addEventListener("click", (event) => {
+                event.stopPropagation();
+                rewardValue.textContent = option.dataset.gp + " GP";
+                closeRewardMenu();
+            });
+        });
+
+        document.addEventListener("click", (event) => {
+            if (!rewardMenu.hidden && !event.target.closest(".reward-picker")) {
+                closeRewardMenu();
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !rewardMenu.hidden) {
+                closeRewardMenu();
+            }
+        });
+    </script>
+</body>
+</html>

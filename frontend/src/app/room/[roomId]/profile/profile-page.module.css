@@ -1,0 +1,482 @@
+.profileViewport {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  align-items: stretch;
+  background-image:
+    linear-gradient(to right, #f1f5f9 1px, transparent 1px),
+    linear-gradient(to bottom, #f1f5f9 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-color: #fafaf9;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.profileContainer {
+  width: 100%;
+  min-height: 100svh;
+}
+
+.pageProfile {
+  min-height: 100svh;
+}
+
+.profileInner {
+  width: 100%;
+  max-width: 420px;
+  min-height: 100svh;
+  margin: 0 auto;
+}
+
+.stateScreen {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.stateCard {
+  width: 100%;
+  max-width: 360px;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  padding: 24px 20px;
+  text-align: center;
+}
+
+.stateKicker {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.stateTitle {
+  margin: 10px 0 0;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #1e2022;
+}
+
+.stateText {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.stateAction {
+  width: 100%;
+  margin-top: 18px;
+  border: 4px solid #1e2022;
+  border-radius: 999px;
+  background-color: #fde047;
+  color: #1e2022;
+  box-shadow: 4px 4px 0 #1e2022;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.spinnerRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.headerSimple {
+  background: #fff;
+  padding: 24px 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.btnBack {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  cursor: pointer;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
+}
+
+.btnBack:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 #e5e7eb;
+}
+
+.btnBack svg {
+  width: 20px;
+  height: 20px;
+  stroke: #1e2022;
+  stroke-width: 3;
+}
+
+.headerSimple h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.profileBody {
+  padding: 20px;
+  padding-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.profileHero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.profileHeroTop {
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profileUser {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.profileAvatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid #e5e7eb;
+  padding: 2px;
+  background: #fff;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  flex-shrink: 0;
+}
+
+.profileAvatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profileKicker {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.profileUserCopy h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e2022;
+  line-height: 1.2;
+}
+
+.profileUserName {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.profileRank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 2px solid #1e2022;
+  border-radius: 999px;
+  background: #fde047;
+  color: #1e2022;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 2px 2px 0 #1e2022;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.profileTotalPanel {
+  background: #fde047;
+  border: 4px solid #1e2022;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 6px 6px 0 #1e2022;
+}
+
+.profileTotalLabel {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(30, 32, 34, 0.72);
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.profileTotalValue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profileTotalValue strong {
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 900;
+  color: #1e2022;
+  letter-spacing: -0.05em;
+}
+
+.profileCoinBadge {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid #1e2022;
+  background: #fff8d6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.coinIcon {
+  width: 14px;
+  height: 14px;
+  background-color: #fde047;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b45309;
+  font-size: 8px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.coinIcon::before {
+  content: "$";
+}
+
+.profileStatsRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profileStatCard {
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profileStatLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.profileStatCard strong {
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.profileStatNote {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.profileHistory {
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+}
+
+.sectionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profileSectionBar {
+  margin-bottom: 18px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+}
+
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.historyItem {
+  position: relative;
+  padding-left: 24px;
+}
+
+.historyLine {
+  position: absolute;
+  left: 7px;
+  top: 18px;
+  bottom: -16px;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.historyDot {
+  position: absolute;
+  left: 0;
+  top: 14px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid #1e2022;
+  background: #fde047;
+  box-sizing: border-box;
+}
+
+.historyContent {
+  background: #f8fafc;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.historyTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.historyTop h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.historyTop p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.historyGp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #fff7cc;
+  color: #c58a00;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.emptyCard {
+  background: #f8fafc;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.emptyTitle {
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.emptyText {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .profileInner {
+    max-width: none;
+  }
+
+  .headerSimple {
+    padding: 22px 16px 14px;
+  }
+
+  .profileBody {
+    padding: 18px 16px 28px;
+  }
+
+  .profileHeroTop,
+  .historyTop {
+    align-items: flex-start;
+  }
+
+  .profileStatsRow {
+    grid-template-columns: 1fr;
+  }
+}

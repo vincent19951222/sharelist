@@ -1,202 +1,133 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { getLocalUser, updateLocalUserName } from '@/lib/store';
-import { createRoomApi } from '@/lib/api';
-import { RecentRoom } from '@/types';
-import { Plus, Loader2, Clock, Shield, ChevronRight, History } from 'lucide-react';
+import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-function formatTimeAgo(timestamp: number) {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return 'Just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+import { accessRoom } from "@/lib/api";
+import { getLocalUser, saveLocalUser } from "@/lib/store";
+import styles from "./entry-page.module.css";
 
-export default function Home() {
+export default function HomePage() {
   const router = useRouter();
-  const [nickname, setNickname] = useState('');
-  const [roomIdInput, setRoomIdInput] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [recentRooms, setRecentRooms] = useState<RecentRoom[]>([]);
-  const [mounted, setMounted] = useState(false);
+  const [roomId, setRoomId] = useState("");
+  const [name, setName] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const user = getLocalUser();
-    if (user.name) setNickname(user.name);
-    setRecentRooms(user.recentRooms || []);
-    setMounted(true);
+    const localUser = getLocalUser();
+    if (localUser?.name) {
+      setName(localUser.name);
+      setRoomId(localUser.roomId);
+    }
   }, []);
 
-  const handleCreateRoom = async () => {
-    if (!nickname.trim()) {
-      alert('Please enter a nickname');
-      return;
-    }
-    updateLocalUserName(nickname);
-    setIsCreating(true);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage(null);
+    setIsSubmitting(true);
 
     try {
-      const room = await createRoomApi(nickname + "'s Room");
-      // Redirect with Admin Token
-      router.push(`/room/${room.roomId}?token=${room.adminToken}`);
-    } catch (err) {
-      alert('Failed to create room. Please try again.');
-      console.error(err);
-      setIsCreating(false);
+      const response = await accessRoom(roomId.trim(), name.trim());
+      saveLocalUser(response.room.roomId, response.user);
+      router.push(`/room/${response.room.roomId}`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "进入房间失败，请稍后再试。");
+      setIsSubmitting(false);
     }
-  };
-
-  const handleJoinRoom = () => {
-    if (!nickname.trim()) {
-      alert('Please enter a nickname');
-      return;
-    }
-    
-    // Smart Join: Handle full URL paste
-    let targetId = roomIdInput.trim();
-    let tokenParam = '';
-
-    if (targetId.includes('http')) {
-       try {
-         const url = new URL(targetId);
-         // Extract Room ID from path (assuming /room/ID)
-         const pathParts = url.pathname.split('/');
-         const idFromPath = pathParts[pathParts.length - 1]; // very basic check
-         if (idFromPath) targetId = idFromPath;
-         
-         const token = url.searchParams.get('token');
-         if (token) tokenParam = `?token=${token}`;
-       } catch (e) {
-         // ignore
-       }
-    }
-
-    if (!targetId) {
-      alert('Please enter a Room ID');
-      return;
-    }
-
-    updateLocalUserName(nickname);
-    router.push(`/room/${targetId}${tokenParam}`);
-  };
-
-  const handleRecentClick = (room: RecentRoom) => {
-      if (!nickname.trim()) return;
-      updateLocalUserName(nickname);
-      const tokenParam = room.token ? `?token=${room.token}` : '';
-      router.push(`/room/${room.roomId}${tokenParam}`);
   }
 
-  if (!mounted) return null;
-
   return (
-    <div className="flex min-h-screen items-center justify-center p-4 bg-muted/30">
-      <Card className="w-full max-w-md shadow-lg border-none sm:border bg-background">
-        <CardHeader className="text-center space-y-2">
-          <CardTitle className="text-3xl font-bold tracking-tight text-primary">Room Todo</CardTitle>
-          <CardDescription>Collaborate on checklists together</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium leading-none">
-              Your Nickname
-            </label>
-            <Input
-              placeholder="Enter your name"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-            />
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-muted-foreground">Start a new list</h3>
-              <Button className="w-full" size="lg" onClick={handleCreateRoom} disabled={isCreating}>
-                {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                {isCreating ? 'Creating...' : 'Create New Room'}
-              </Button>
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Join with invite</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <Input
-                placeholder="Invite Code or Link"
-                value={roomIdInput}
-                onChange={(e) => setRoomIdInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleJoinRoom();
-                }}
-              />
-              <Button variant="secondary" onClick={handleJoinRoom}>
-                Join
-              </Button>
-            </div>
-          </div>
-
-          {/* Recent Rooms Section */}
-          {recentRooms.length > 0 && (
-            <>
-                <Separator />
-                <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <History className="w-4 h-4" />
-                        <h3>Recent Rooms</h3>
-                    </div>
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                        {recentRooms.map((room) => (
-                            <button
-                                key={room.roomId}
-                                onClick={() => handleRecentClick(room)}
-                                className="w-full flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors text-left group"
-                            >
-                                <div className="flex flex-col gap-1 min-w-0">
-                                    <div className="font-medium truncate flex items-center gap-2">
-                                        {room.roomName}
-                                        {room.role === 'admin' && (
-                                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-primary text-primary">
-                                                Admin
-                                            </Badge>
-                                        )}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        {formatTimeAgo(room.lastVisited)}
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                            </button>
-                        ))}
-                    </div>
+    <div className={styles.entryViewport}>
+      <div className={styles.appContainer}>
+        <div className={`${styles.page} ${styles.pageLogin}`}>
+          <div className={styles.entryShell}>
+            <section className={styles.entryHeroCard}>
+              <div className={styles.entryBrandRow}>
+                <div className={`${styles.logoBox} ${styles.entryLogoBox}`}>
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M4 22V10l4-4v4h8V6l4 4v12H4zm2-2h12v-8h-2v4h-8v-4H6v8zm4-8h4V8h-4v4z" />
+                  </svg>
                 </div>
-            </>
-          )}
+                <div className={styles.entryBrandCopy}>
+                  <span className={styles.entryKicker}>ROOM TODO</span>
+                  <h1 className={styles.entryTitle}>Join Room</h1>
+                </div>
+              </div>
 
-        </CardContent>
-        <CardFooter className="justify-center text-xs text-muted-foreground">
-          Simple, fast, secure.
-        </CardFooter>
-      </Card>
+              <div className={styles.entryHeroVisual}>
+                <img alt="Room Todo preview" src="/todolist.png" />
+              </div>
+            </section>
+
+            <section className={styles.entryFormCard}>
+              <div className={styles.entryFormHead}>
+                <span className={`${styles.sectionTitle} ${styles.entryFormTitle}`}>ROOM ACCESS</span>
+              </div>
+
+              <form onSubmit={handleSubmit}>
+                <div className={styles.inputGroup}>
+                  <label htmlFor="room-id">ROOM ID</label>
+                  <div className={styles.inputWrapper}>
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" />
+                    </svg>
+                    <input
+                      id="room-id"
+                      autoComplete="off"
+                      placeholder="Enter code..."
+                      type="text"
+                      value={roomId}
+                      onChange={(event) => setRoomId(event.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.inputGroup}>
+                  <label htmlFor="user-name">YOUR NAME</label>
+                  <div className={styles.inputWrapper}>
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                    </svg>
+                    <input
+                      id="user-name"
+                      autoCapitalize="none"
+                      autoComplete="off"
+                      placeholder="Adventurer name"
+                      type="text"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {errorMessage ? <div className={styles.entryError}>{errorMessage}</div> : null}
+
+                <button
+                  aria-busy={isSubmitting}
+                  className={styles.btnStart}
+                  disabled={isSubmitting}
+                  type="submit"
+                >
+                  <svg
+                    aria-hidden="true"
+                    fill="none"
+                    height="20"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    viewBox="0 0 24 24"
+                    width="20"
+                  >
+                    <line x1="12" x2="12" y1="5" y2="19" />
+                    <line x1="5" x2="19" y1="12" y2="12" />
+                  </svg>
+                  START QUEST
+                </button>
+              </form>
+            </section>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

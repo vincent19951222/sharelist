@@ -4,8 +4,8 @@
   "private": true,
   "description": "ShareList Monorepo Root",
   "scripts": {
-    "install:all": "npm install && npm install --prefix frontend && pip install -r backend/requirements.txt",
-    "dev": "concurrently \"npm run dev --prefix frontend\" \"uvicorn backend.main:app --reload --port 8000\"",
+    "install:all": "npm install && npm install --prefix frontend && python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt",
+    "dev": "concurrently \"npm run dev --prefix frontend -- --hostname 0.0.0.0\" \"backend/.venv/bin/uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000\"",
     "build:frontend": "npm run build --prefix frontend",
     "db:backup": "python scripts/db_tool.py backup",
     "db:restore": "python scripts/db_tool.py restore",

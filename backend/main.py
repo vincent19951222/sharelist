@@ -1,32 +1,51 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Query
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, List, Optional, Tuple
+from __future__ import annotations
+
 import asyncio
 import os
 import time
-from uuid import uuid4
 from collections import deque
-from nanoid import generate
+from contextlib import asynccontextmanager
+from datetime import datetime, time as datetime_time, timedelta
+from typing import Dict, List, Optional, Tuple
+from uuid import uuid4
+from zoneinfo import ZoneInfo
 
-from sqlmodel import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
 
-from .database import init_db, get_db, async_session
-from .models import Room, TodoItem, RoomCreate
-from .logger import logger, LogContext
+from .database import async_session, get_db, init_db
 from .errors import ErrorCode
+from .logger import LogContext, logger
+from .models import AutoQuest, GpLedger, Room, RoomMember, TodoItem, User, get_current_timestamp
+from .security import rate_limiter, sanitize_text
 from .telemetry import metrics
-from .security import sanitize_text, rate_limiter
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await init_db()
+    await ensure_seed_data()
+    keep_alive = asyncio.create_task(keep_alive_task())
+    cleanup = asyncio.create_task(cleanup_expired_rooms_task())
+    try:
+        yield
+    finally:
+        keep_alive.cancel()
+        cleanup.cancel()
+
+
+app = FastAPI(lifespan=lifespan)
 
 cors_allow_origins = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOW_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
+        "*",
     ).split(",")
     if origin.strip()
 ]
@@ -40,45 +59,100 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def get_root():
-    return {"message": "ShareList Backend is running (With Auth)", "status": "ok"}
-
-@app.get("/sys/stats")
-async def get_system_stats():
-    """Lightweight observability endpoint"""
-    return metrics.get_stats()
-
-# Configuration
 MAX_USERS_PER_ROOM = 50
 MAX_ITEMS_PER_ROOM = 200
+MAX_AUTO_QUESTS_PER_ROOM = 50
 MAX_ITEM_LENGTH = 500
 EVENT_HISTORY_LIMIT = 100
-KEEP_ALIVE_INTERVAL = 30  # seconds
+KEEP_ALIVE_INTERVAL = 30
+CLEANUP_INTERVAL = 3600
+ROOM_TTL = 24 * 3600 * 1000
 
-# Priority validation
-VALID_PRIORITIES = {"high", "medium", "low"}
+DAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+DAY_TO_INDEX = {day: index for index, day in enumerate(DAY_ORDER)}
+RANK_THRESHOLDS = (
+    ("S", 1200),
+    ("A", 600),
+    ("B", 200),
+    ("C", 0),
+)
 
-def validate_priority(priority: Optional[str]) -> str:
-    """
-    Validate and return priority value.
-    Defaults to 'medium' if None.
-    Raises ValueError if invalid priority is provided.
-    """
-    if priority is None:
-        return "medium"
-    if priority not in VALID_PRIORITIES:
-        raise ValueError(f"Invalid priority: '{priority}'. Use: high, medium, or low")
-    return priority
+SEED_ROOM = {
+    "room_code": "9999",
+    "title": "我的房间",
+    "timezone": "Asia/Shanghai",
+}
+SEED_USERS = (
+    {
+        "name": "vincent",
+        "display_name": "Vincent",
+        "avatar_url": "/cat.png",
+    },
+    {
+        "name": "cindy",
+        "display_name": "Cindy",
+        "avatar_url": "/dog.png",
+    },
+)
 
-# In-memory Idempotency Cache (per room)
+
+class RoomAccessRequest(BaseModel):
+    roomId: str
+    name: str
+
+
+class ConnectionManager:
+    def __init__(self) -> None:
+        self.active_connections: Dict[str, List[dict]] = {}
+
+    async def connect(self, websocket: WebSocket, room_code: str, user_id: str, user_name: str) -> None:
+        await websocket.accept()
+        room_connections = self.active_connections.setdefault(room_code, [])
+        if len(room_connections) >= MAX_USERS_PER_ROOM:
+            await websocket.close(code=4003, reason="Room is full")
+            logger.warning("Connection rejected: room is full", extra={"error_code": ErrorCode.ROOM_FULL})
+            raise WebSocketDisconnect
+
+        room_connections.append(
+            {
+                "ws": websocket,
+                "user_id": user_id,
+                "user_name": user_name,
+            }
+        )
+        metrics.increment_connections()
+
+    def disconnect(self, websocket: WebSocket, room_code: str) -> None:
+        if room_code not in self.active_connections:
+            return
+
+        before = len(self.active_connections[room_code])
+        self.active_connections[room_code] = [
+            connection for connection in self.active_connections[room_code] if connection["ws"] is not websocket
+        ]
+        if len(self.active_connections[room_code]) < before:
+            metrics.decrement_connections()
+
+        if not self.active_connections[room_code]:
+            del self.active_connections[room_code]
+            room_event_cache.pop(room_code, None)
+
+    def get_connections(self, room_code: str) -> List[dict]:
+        return list(self.active_connections.get(room_code, []))
+
+    def online_user_ids(self, room_code: str) -> set[str]:
+        return {connection["user_id"] for connection in self.active_connections.get(room_code, [])}
+
+
+manager = ConnectionManager()
 room_event_cache: Dict[str, deque] = {}
 
+
+def normalize_member_name(name: str) -> str:
+    return (name or "").strip().lower()
+
+
 def parse_event_message(data: dict) -> Tuple[Optional[str], Optional[dict], Optional[str]]:
-    """
-    Parse websocket message and safely extract event metadata.
-    Returns (event_type, payload_dict, client_event_id).
-    """
     if not isinstance(data, dict):
         return None, None, None
     event_type = data.get("type")
@@ -87,519 +161,851 @@ def parse_event_message(data: dict) -> Tuple[Optional[str], Optional[dict], Opti
         return None, None, None
     return event_type, payload, payload.get("clientEventId")
 
-def apply_item_edit(target: TodoItem, raw_text: Optional[str], priority: Optional[str], updated_at: int) -> bool:
-    """
-    Apply optional text/priority updates to a TodoItem.
-    Returns True when any field changes.
-    """
+
+def sanitize_title(value: Optional[str]) -> str:
+    return sanitize_text(value or "").strip()
+
+
+def validate_reward_gp(value: object) -> int:
+    if value is None or value == "":
+        return 10
+    try:
+        reward = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Reward GP must be a number.") from exc
+    if reward < 1 or reward > 999:
+        raise ValueError("Reward GP must be between 1 and 999.")
+    return reward
+
+
+def repeat_days_to_mask(days: List[str]) -> int:
+    if not isinstance(days, list):
+        raise ValueError("Repeat days must be an array.")
+
+    mask = 0
+    for day in days:
+        normalized = str(day)
+        if normalized not in DAY_TO_INDEX:
+            raise ValueError("Repeat days must use Sun/Mon/Tue/Wed/Thu/Fri/Sat.")
+        mask |= 1 << DAY_TO_INDEX[normalized]
+    return mask
+
+
+def repeat_mask_to_days(mask: int) -> List[str]:
+    return [day for index, day in enumerate(DAY_ORDER) if mask & (1 << index)]
+
+
+def room_local_now(timezone_name: str) -> datetime:
+    return datetime.now(ZoneInfo(timezone_name))
+
+
+def room_today_context(timezone_name: str) -> tuple[datetime, str, str]:
+    local_now = room_local_now(timezone_name)
+    weekday = DAY_ORDER[(local_now.weekday() + 1) % 7]
+    return local_now, local_now.date().isoformat(), weekday
+
+
+def rank_for_total_gp(total_gp: int) -> str:
+    for rank, threshold in RANK_THRESHOLDS:
+        if total_gp >= threshold:
+            return rank
+    return "C"
+
+
+def start_of_local_day(local_dt: datetime) -> datetime:
+    return datetime.combine(local_dt.date(), datetime_time.min, tzinfo=local_dt.tzinfo)
+
+
+def serialize_member(member: RoomMember, online_user_ids: set[str]) -> dict:
+    user = member.user
+    return {
+        "userId": user.id,
+        "name": user.name,
+        "displayName": user.display_name,
+        "avatarUrl": user.avatar_url,
+        "role": member.role,
+        "isOnline": user.id in online_user_ids,
+    }
+
+
+def serialize_auto_quest(auto_quest: AutoQuest) -> dict:
+    return {
+        "id": auto_quest.id,
+        "title": auto_quest.title,
+        "rewardGp": auto_quest.reward_gp,
+        "repeatDays": repeat_mask_to_days(auto_quest.repeat_mask),
+        "isEnabled": auto_quest.is_enabled,
+        "createdBy": auto_quest.created_by_user.name if auto_quest.created_by_user else None,
+        "createdAt": auto_quest.created_at,
+        "updatedAt": auto_quest.updated_at,
+    }
+
+
+def serialize_todo_item(item: TodoItem, users_by_id: Dict[str, User]) -> dict:
+    created_by = users_by_id.get(item.created_by_user_id)
+    completed_by = users_by_id.get(item.completed_by_user_id) if item.completed_by_user_id else None
+    return {
+        "id": item.id,
+        "title": item.title,
+        "done": item.done,
+        "rewardGp": item.reward_gp,
+        "sourceType": item.source_type,
+        "autoQuestId": item.auto_quest_id,
+        "scheduledDate": item.scheduled_date,
+        "createdBy": created_by.name if created_by else None,
+        "completedBy": completed_by.name if completed_by else None,
+        "completedAt": item.completed_at,
+        "createdAt": item.created_at,
+        "updatedAt": item.updated_at,
+    }
+
+
+def visible_room_items(items: List[TodoItem], today_str: str) -> List[TodoItem]:
+    visible: List[TodoItem] = []
+    for item in items:
+        if item.is_deleted:
+            continue
+        if item.source_type == "auto_quest":
+            if item.scheduled_date == today_str:
+                visible.append(item)
+            continue
+        visible.append(item)
+    return sorted(visible, key=lambda item: (item.done, item.created_at))
+
+
+async def send_error_message(websocket: WebSocket, message: str) -> None:
+    await websocket.send_json({"type": "error", "payload": {"message": message}})
+
+
+async def load_room_member(session: AsyncSession, room_code: str, user_name: str) -> Optional[RoomMember]:
+    statement = (
+        select(RoomMember)
+        .join(Room, RoomMember.room_id == Room.id)
+        .join(User, RoomMember.user_id == User.id)
+        .where(Room.room_code == room_code, User.name == user_name)
+        .options(selectinload(RoomMember.user), selectinload(RoomMember.room))
+    )
+    result = await session.execute(statement)
+    return result.scalars().first()
+
+
+async def load_room_state(session: AsyncSession, room_code: str) -> Optional[Room]:
+    statement = (
+        select(Room)
+        .where(Room.room_code == room_code)
+        .options(
+            selectinload(Room.members).selectinload(RoomMember.user),
+            selectinload(Room.items),
+            selectinload(Room.auto_quests).selectinload(AutoQuest.created_by_user),
+        )
+    )
+    result = await session.execute(statement)
+    room = result.scalars().first()
+    if not room:
+        return None
+
+    # Populate item users with two targeted reads instead of relationship fan-out.
+    user_ids = {
+        item.created_by_user_id
+        for item in room.items
+        if item.created_by_user_id
+    } | {
+        item.completed_by_user_id
+        for item in room.items
+        if item.completed_by_user_id
+    }
+    if user_ids:
+        user_result = await session.execute(select(User).where(User.id.in_(user_ids)))
+        users = {user.id: user for user in user_result.scalars().all()}
+        for item in room.items:
+            item.created_by_user = users.get(item.created_by_user_id)
+            item.completed_by_user = users.get(item.completed_by_user_id) if item.completed_by_user_id else None
+    return room
+
+
+async def ensure_seed_data() -> None:
+    async with async_session() as session:
+        room_result = await session.execute(select(Room).where(Room.room_code == SEED_ROOM["room_code"]))
+        room = room_result.scalars().first()
+        if not room:
+            room = Room(
+                room_code=SEED_ROOM["room_code"],
+                title=SEED_ROOM["title"],
+                timezone=SEED_ROOM["timezone"],
+                is_seeded=True,
+                never_expires=True,
+            )
+            session.add(room)
+            await session.flush()
+        else:
+            room.title = SEED_ROOM["title"]
+            room.timezone = SEED_ROOM["timezone"]
+            room.is_seeded = True
+            room.never_expires = True
+            room.updated_at = get_current_timestamp()
+            session.add(room)
+
+        users_by_name: Dict[str, User] = {}
+        for seed_user in SEED_USERS:
+            user_result = await session.execute(select(User).where(User.name == seed_user["name"]))
+            user = user_result.scalars().first()
+            if not user:
+                user = User(**seed_user)
+            else:
+                user.display_name = seed_user["display_name"]
+                user.avatar_url = seed_user["avatar_url"]
+                user.updated_at = get_current_timestamp()
+            session.add(user)
+            await session.flush()
+            users_by_name[user.name] = user
+
+        for user in users_by_name.values():
+            membership_result = await session.execute(
+                select(RoomMember).where(RoomMember.room_id == room.id, RoomMember.user_id == user.id)
+            )
+            membership = membership_result.scalars().first()
+            if not membership:
+                membership = RoomMember(room_id=room.id, user_id=user.id, role="admin")
+            else:
+                membership.role = "admin"
+            session.add(membership)
+
+        await session.commit()
+
+
+async def ensure_today_auto_quests(session: AsyncSession, room: Room) -> bool:
+    _, today_str, weekday = room_today_context(room.timezone)
+    has_changes = False
+
+    existing_today_keys = {
+        (item.auto_quest_id, item.scheduled_date)
+        for item in room.items
+        if item.auto_quest_id and item.scheduled_date
+    }
+
+    for auto_quest in room.auto_quests:
+        if not auto_quest.is_enabled:
+            continue
+        if not auto_quest.repeat_mask & (1 << DAY_TO_INDEX[weekday]):
+            continue
+        if (auto_quest.id, today_str) in existing_today_keys:
+            continue
+        if len([item for item in room.items if not item.is_deleted]) >= MAX_ITEMS_PER_ROOM:
+            break
+
+        new_item = TodoItem(
+            room_id=room.id,
+            title=auto_quest.title,
+            reward_gp=auto_quest.reward_gp,
+            source_type="auto_quest",
+            auto_quest_id=auto_quest.id,
+            scheduled_date=today_str,
+            created_by_user_id=auto_quest.created_by_user_id,
+        )
+        session.add(new_item)
+        room.items.append(new_item)
+        existing_today_keys.add((auto_quest.id, today_str))
+        has_changes = True
+
+    if has_changes:
+        timestamp = get_current_timestamp()
+        room.updated_at = timestamp
+        room.last_activity_at = timestamp
+        session.add(room)
+
+    return has_changes
+
+
+async def load_or_build_snapshot(session: AsyncSession, room_code: str) -> Optional[tuple[dict, Dict[str, dict]]]:
+    room = await load_room_state(session, room_code)
+    if not room:
+        return None
+
+    generated = await ensure_today_auto_quests(session, room)
+    if generated:
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+        room = await load_room_state(session, room_code)
+        if not room:
+            return None
+
+    _, today_str, _ = room_today_context(room.timezone)
+    online_user_ids = manager.online_user_ids(room_code)
+    members = [serialize_member(member, online_user_ids) for member in sorted(room.members, key=lambda member: member.created_at)]
+    users_by_id = {member.user.id: member.user for member in room.members}
+    items = [serialize_todo_item(item, users_by_id) for item in visible_room_items(room.items, today_str)]
+    auto_quests = [serialize_auto_quest(auto_quest) for auto_quest in sorted(room.auto_quests, key=lambda quest: quest.created_at)]
+
+    current_users = {member["userId"]: member for member in members}
+    common_payload = {
+        "room": {
+            "roomId": room.room_code,
+            "title": room.title,
+            "timezone": room.timezone,
+        },
+        "members": members,
+        "items": items,
+        "autoQuests": auto_quests,
+    }
+    return common_payload, current_users
+
+
+async def emit_room_snapshot(room_code: str, connections: Optional[List[dict]] = None) -> None:
+    target_connections = connections or manager.get_connections(room_code)
+    if not target_connections:
+        return
+
+    async with async_session() as session:
+        snapshot = await load_or_build_snapshot(session, room_code)
+        if not snapshot:
+            return
+        common_payload, current_users = snapshot
+
+    for connection in target_connections:
+        current_user = current_users.get(connection["user_id"])
+        if not current_user:
+            continue
+        try:
+            await connection["ws"].send_json(
+                {
+                    "type": "snapshot",
+                    "payload": {
+                        **common_payload,
+                        "currentUser": current_user,
+                    },
+                }
+            )
+        except Exception:
+            metrics.track_broadcast_error()
+
+
+async def reverse_active_ledger(session: AsyncSession, item: TodoItem, timestamp: int) -> None:
+    ledger_result = await session.execute(
+        select(GpLedger)
+        .where(GpLedger.todo_item_id == item.id, GpLedger.reversed_at.is_(None))
+        .order_by(GpLedger.awarded_at.desc())
+    )
+    active_entry = ledger_result.scalars().first()
+    if active_entry:
+        active_entry.reversed_at = timestamp
+        session.add(active_entry)
+
+
+async def award_gp(session: AsyncSession, room: Room, item: TodoItem, user_id: str, timestamp: int) -> None:
+    ledger_result = await session.execute(
+        select(GpLedger)
+        .where(
+            GpLedger.todo_item_id == item.id,
+            GpLedger.user_id == user_id,
+            GpLedger.reversed_at.is_not(None),
+        )
+        .order_by(GpLedger.awarded_at.desc())
+    )
+    reusable_entry = ledger_result.scalars().first()
+    if reusable_entry:
+        reusable_entry.gp_delta = item.reward_gp
+        reusable_entry.todo_title = item.title
+        reusable_entry.awarded_at = timestamp
+        reusable_entry.reversed_at = None
+        session.add(reusable_entry)
+        return
+
+    session.add(
+        GpLedger(
+            room_id=room.id,
+            user_id=user_id,
+            todo_item_id=item.id,
+            todo_title=item.title,
+            gp_delta=item.reward_gp,
+            awarded_at=timestamp,
+        )
+    )
+
+
+def apply_item_edit(target: TodoItem, raw_title: Optional[str], reward_gp: Optional[int], updated_at: int) -> bool:
     updated = False
 
-    # Only update text when a non-empty value is provided after sanitization.
-    if raw_text is not None:
-        text = sanitize_text(raw_text)
-        if text and target.text != text:
-            target.text = text[:MAX_ITEM_LENGTH]
-            target.updatedAt = updated_at
+    if raw_title is not None:
+        title = sanitize_title(raw_title)
+        if title and title != target.title:
+            target.title = title[:MAX_ITEM_LENGTH]
             updated = True
 
-    if priority is not None and target.priority != priority:
-        target.priority = priority
-        target.updatedAt = updated_at
+    if reward_gp is not None and reward_gp != target.reward_gp:
+        target.reward_gp = reward_gp
         updated = True
+
+    if updated:
+        target.updated_at = updated_at
 
     return updated
 
-# Connection Manager
-class ConnectionManager:
-    def __init__(self):
-        # Map: roomId -> List[{ws: WebSocket, role: str}]
-        self.active_connections: Dict[str, List[dict]] = {}
 
-    async def connect(self, websocket: WebSocket, room_id: str, role: str):
-        await websocket.accept()
-        if room_id not in self.active_connections:
-            self.active_connections[room_id] = []
-        
-        if len(self.active_connections[room_id]) >= MAX_USERS_PER_ROOM:
-            await websocket.close(code=4003, reason="Room is full")
-            logger.warning(f"Connection rejected: Room {room_id} is full", extra={"error_code": ErrorCode.ROOM_FULL})
-            raise WebSocketDisconnect
-            
-        self.active_connections[room_id].append({"ws": websocket, "role": role})
-        metrics.increment_connections()
-        logger.info(f"User connected", extra={"role": role})
+async def sync_today_item_with_auto_quest(session: AsyncSession, room: Room, auto_quest: AutoQuest) -> None:
+    _, today_str, _ = room_today_context(room.timezone)
+    item_result = await session.execute(
+        select(TodoItem).where(
+            TodoItem.room_id == room.id,
+            TodoItem.auto_quest_id == auto_quest.id,
+            TodoItem.scheduled_date == today_str,
+        )
+    )
+    today_item = item_result.scalars().first()
+    if not today_item or today_item.is_deleted:
+        return
 
-    def disconnect(self, websocket: WebSocket, room_id: str):
-        if room_id in self.active_connections:
-            # Remove by object identity
-            initial_count = len(self.active_connections[room_id])
-            self.active_connections[room_id] = [c for c in self.active_connections[room_id] if c["ws"] != websocket]
-            
-            if len(self.active_connections[room_id]) < initial_count:
-                metrics.decrement_connections()
-                logger.info(f"User disconnected")
-            
-            if not self.active_connections[room_id]:
-                del self.active_connections[room_id]
-                if room_id in room_event_cache:
-                    del room_event_cache[room_id]
+    today_item.title = auto_quest.title
+    today_item.reward_gp = auto_quest.reward_gp
+    today_item.updated_at = get_current_timestamp()
+    session.add(today_item)
 
-    async def broadcast(self, room_id: str, message: dict):
-        if room_id in self.active_connections:
-            metrics.broadcasts_total += 1
-            for connection in self.active_connections[room_id]:
-                try:
-                    await connection["ws"].send_json(message)
-                except Exception as e:
-                    metrics.track_broadcast_error()
-                    logger.error(f"Broadcast failed to client", exc_info=True)
-                    pass
 
-manager = ConnectionManager()
-
-# Background Keep-Alive Task
-async def keep_alive_task():
+async def keep_alive_task() -> None:
     while True:
         await asyncio.sleep(KEEP_ALIVE_INTERVAL)
-        for room_id, connections in list(manager.active_connections.items()):
-            if not connections: 
+        for room_code, connections in list(manager.active_connections.items()):
+            if not connections:
                 continue
-            
-            ping_msg = {"type": "ping", "payload": {"ts": int(time.time() * 1000)}}
-            
-            for conn in list(connections):
+            for connection in list(connections):
                 try:
-                    await conn["ws"].send_json(ping_msg)
+                    await connection["ws"].send_json(
+                        {
+                            "type": "ping",
+                            "payload": {"ts": get_current_timestamp()},
+                        }
+                    )
                 except Exception:
-                    # Will be cleaned up by disconnect
                     pass
 
-# Background Cleanup Task
-CLEANUP_INTERVAL = 3600 # 1 hour
-ROOM_TTL = 24 * 3600 * 1000 # 24 hours in milliseconds
 
-async def cleanup_expired_rooms_task():
+async def cleanup_expired_rooms_task() -> None:
     while True:
-        try:
-            print("Running cleanup task...")
-            current_time = get_current_timestamp()
-            threshold = current_time - ROOM_TTL
-            
-            async with async_session() as session:
-                # Find expired rooms
-                statement = select(Room).where(Room.updatedAt < threshold)
-                result = await session.execute(statement)
-                expired_rooms = result.scalars().all()
-                
-                count = 0
-                for room in expired_rooms:
-                    # Optional: Check if room is currently active in memory?
-                    # If active, maybe extend TTL? 
-                    # For now, strict TTL based on DB update time.
-                    # Active rooms update 'updatedAt' on every edit, so they are safe.
-                    # Only idle rooms will be deleted.
-                    
-                    # Also need to close active WS connections if any (edge case)
-                    if room.roomId in manager.active_connections:
-                        for conn in manager.active_connections[room.roomId]:
-                            await conn["ws"].close(code=4004, reason="Room expired")
-                        del manager.active_connections[room.roomId]
-
-                    await session.delete(room)
-                    count += 1
-                
-                if count > 0:
-                    await session.commit()
-                    print(f"Cleaned up {count} expired rooms")
-                    
-        except Exception as e:
-            print(f"Cleanup task error: {e}")
-            
         await asyncio.sleep(CLEANUP_INTERVAL)
+        try:
+            threshold = get_current_timestamp() - ROOM_TTL
+            async with async_session() as session:
+                result = await session.execute(
+                    select(Room).where(Room.never_expires.is_(False), Room.last_activity_at < threshold)
+                )
+                expired_rooms = result.scalars().all()
+                for room in expired_rooms:
+                    for connection in manager.get_connections(room.room_code):
+                        await connection["ws"].close(code=4004, reason="Room expired")
+                    await session.delete(room)
+                if expired_rooms:
+                    await session.commit()
+        except Exception:
+            logger.error("Cleanup task failed", exc_info=True)
 
-@app.on_event("startup")
-async def startup_event():
-    await init_db() 
-    asyncio.create_task(keep_alive_task())
-    asyncio.create_task(cleanup_expired_rooms_task())
+@app.get("/")
+async def get_root() -> dict:
+    return {"message": "ShareList Backend is running", "status": "ok"}
 
-def get_current_timestamp():
-    return int(time.time() * 1000)
 
-async def get_room_snapshot(session: AsyncSession, room_id: str) -> Optional[dict]:
-    statement = select(Room).where(Room.roomId == room_id).options(selectinload(Room.items))
-    result = await session.execute(statement)
-    room = result.scalars().first()
-    
-    if not room:
-        return None
-    
-    # Sort items: Incomplete first, then by creation time
-    sorted_items = sorted(room.items, key=lambda x: (x.done, x.createdAt))
+@app.get("/sys/stats")
+async def get_system_stats() -> dict:
+    return metrics.get_stats()
+
+
+@app.post("/api/rooms/access")
+async def access_room(payload: RoomAccessRequest, session: AsyncSession = Depends(get_db)) -> dict:
+    room_code = (payload.roomId or "").strip()
+    user_name = normalize_member_name(payload.name)
+
+    if not room_code:
+        raise HTTPException(status_code=400, detail="Room ID is required.")
+    if not user_name:
+        raise HTTPException(status_code=400, detail="Name is required.")
+
+    member = await load_room_member(session, room_code, user_name)
+    if not member:
+        room_exists = await session.execute(select(Room).where(Room.room_code == room_code))
+        if room_exists.scalars().first():
+            raise HTTPException(status_code=401, detail="Only approved members can enter this room.")
+        raise HTTPException(status_code=404, detail="Room not found.")
 
     return {
-        "roomId": room.roomId,
-        "roomName": room.roomName,
-        "version": room.version,
-        "createdAt": room.createdAt,
-        "updatedAt": room.updatedAt,
-        "joinToken": room.joinToken, # Send joinToken so members can share it
-        "items": [item.model_dump() for item in sorted_items]
+        "room": {
+            "roomId": member.room.room_code,
+            "title": member.room.title,
+            "timezone": member.room.timezone,
+        },
+        "user": serialize_member(member, set()),
     }
 
-# --- REST API for Room Creation ---
 
-@app.post("/api/rooms")
-async def create_room(room_data: RoomCreate, session: AsyncSession = Depends(get_db)):
-    # Generate short ID if not provided (6 chars, safe for URL)
-    new_room_id = room_data.roomId
-    if not new_room_id:
-        new_room_id = generate(size=6)
-    
-    with LogContext(action="create_room"):
-        # Retry logic for collision (simple)
-        for _ in range(3):
-            try:
-                start_time = time.time()
-                room = Room(
-                    roomId=new_room_id,
-                    roomName=room_data.roomName,
-                    # tokens are generated by default_factory in Model
-                )
-                session.add(room)
-                await session.commit()
-                await session.refresh(room)
-                
-                metrics.track_db_latency(start_time)
-                logger.info(f"Room created", extra={"room_id": room.roomId})
-                
-                return {
-                    "roomId": room.roomId,
-                    "roomName": room.roomName,
-                    "adminToken": room.adminToken,
-                    "joinToken": room.joinToken
-                }
-            except IntegrityError:
-                await session.rollback()
-                if room_data.roomId: # If user provided specific ID and failed, error out
-                    logger.warning("Room ID collision or duplicate", extra={"room_id": room_data.roomId})
-                    metrics.track_error()
-                    raise HTTPException(status_code=400, detail="Room ID already exists")
-                new_room_id = generate(size=6) # Retry with new ID
-        
-        logger.error("Failed to generate unique Room ID after retries")
-        metrics.track_error()
-        raise HTTPException(status_code=500, detail="Failed to generate unique Room ID")
+@app.get("/api/rooms/{room_id}/snapshot")
+async def get_room_snapshot(room_id: str, name: str, session: AsyncSession = Depends(get_db)) -> dict:
+    normalized_name = normalize_member_name(name)
+    if not normalized_name:
+        raise HTTPException(status_code=400, detail="Name is required.")
 
-@app.post("/api/rooms/{room_id}/rotate-token")
-async def rotate_token(
-    room_id: str, 
-    payload: dict, # Expect {"adminToken": "..."}
-    session: AsyncSession = Depends(get_db)
-):
-    """
-    Regenerates the joinToken for a room.
-    Requires valid adminToken.
-    """
-    provided_token = payload.get("adminToken")
-    if not provided_token:
-        raise HTTPException(status_code=401, detail="Admin token required")
+    member = await load_room_member(session, room_id, normalized_name)
+    if not member:
+        room_exists = await session.execute(select(Room).where(Room.room_code == room_id))
+        if room_exists.scalars().first():
+            raise HTTPException(status_code=401, detail="Only approved members can enter this room.")
+        raise HTTPException(status_code=404, detail="Room not found.")
 
-    statement = select(Room).where(Room.roomId == room_id)
-    result = await session.execute(statement)
-    room = result.scalars().first()
-    
+    snapshot = await load_or_build_snapshot(session, room_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Room not found.")
+
+    common_payload, current_users = snapshot
+    current_user = current_users.get(member.user.id)
+    if not current_user:
+        current_user = serialize_member(member, manager.online_user_ids(room_id))
+
+    return {
+        **common_payload,
+        "currentUser": current_user,
+    }
+
+
+@app.get("/api/rooms/{room_id}/profiles/{user_id}")
+async def get_profile(room_id: str, user_id: str, session: AsyncSession = Depends(get_db)) -> dict:
+    room_result = await session.execute(select(Room).where(Room.room_code == room_id))
+    room = room_result.scalars().first()
     if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
-        
-    if room.adminToken != provided_token:
-        raise HTTPException(status_code=403, detail="Invalid admin token")
-        
-    # Rotate Join Token
-    old_token = room.joinToken
-    # Note: Room model has default factory, but here we update manually
-    from uuid import uuid4
-    room.joinToken = str(uuid4())
-    session.add(room)
-    await session.commit()
-    
-    logger.info(f"Join token rotated", extra={"room_id": room_id})
-    
-    # Notify all connected clients (Admin & Members)
-    # Members with old token will be effectively kicked on next reconnect/refresh
-    # Ideally, we should also close their current WS connections, but for MVP
-    # letting them stay until refresh is acceptable, OR we can force disconnect.
-    
-    # Let's broadcast an event so frontend can update its UI or warn user
-    await manager.broadcast(room_id, {
-        "type": "token_rotated",
-        "payload": {
-            "newJoinToken": room.joinToken
-        }
-    })
-    
-    return {"newJoinToken": room.joinToken}
+        raise HTTPException(status_code=404, detail="Room not found.")
 
+    member_result = await session.execute(
+        select(RoomMember)
+        .where(RoomMember.room_id == room.id, RoomMember.user_id == user_id)
+        .options(selectinload(RoomMember.user))
+    )
+    member = member_result.scalars().first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Profile not found.")
 
-# --- WebSocket ---
+    entries_result = await session.execute(
+        select(GpLedger)
+        .where(GpLedger.room_id == room.id, GpLedger.user_id == user_id, GpLedger.reversed_at.is_(None))
+        .order_by(GpLedger.awarded_at.desc())
+    )
+    entries = entries_result.scalars().all()
+
+    local_now = room_local_now(room.timezone)
+    week_start = start_of_local_day(local_now - timedelta(days=local_now.weekday()))
+    month_start = start_of_local_day(local_now.replace(day=1))
+    week_start_ms = int(week_start.timestamp() * 1000)
+    month_start_ms = int(month_start.timestamp() * 1000)
+
+    total_gp = sum(entry.gp_delta for entry in entries)
+    week_entries = [entry for entry in entries if entry.awarded_at >= week_start_ms]
+    month_entries = [entry for entry in entries if entry.awarded_at >= month_start_ms]
+
+    return {
+        "userId": member.user.id,
+        "name": member.user.name,
+        "displayName": member.user.display_name,
+        "avatarUrl": member.user.avatar_url,
+        "rank": rank_for_total_gp(total_gp),
+        "totalGp": total_gp,
+        "thisWeekGp": sum(entry.gp_delta for entry in week_entries),
+        "thisWeekCount": len(week_entries),
+        "thisMonthGp": sum(entry.gp_delta for entry in month_entries),
+        "thisMonthCount": len(month_entries),
+        "history": [
+            {
+                "id": entry.id,
+                "todoItemId": entry.todo_item_id,
+                "todoTitle": entry.todo_title,
+                "gpDelta": entry.gp_delta,
+                "awardedAt": entry.awarded_at,
+            }
+            for entry in entries
+        ],
+    }
+
 
 @app.websocket("/ws/{room_id}/{user_name}")
 async def websocket_endpoint(
-    websocket: WebSocket, 
-    room_id: str, 
-    user_name: str, 
-    token: Optional[str] = Query(None)
-):
-    # Setup Context Logger
-    conn_id = str(uuid4())
-    
-    # 1. Validate Room & Token BEFORE accepting
-    with LogContext(room_id=room_id, user=user_name, conn_id=conn_id):
+    websocket: WebSocket,
+    room_id: str,
+    user_name: str,
+    reconnect: Optional[str] = Query(None),
+) -> None:
+    del reconnect
+    connection_id = str(uuid4())
+    normalized_name = normalize_member_name(user_name)
+
+    with LogContext(room_id=room_id, user=normalized_name, conn_id=connection_id):
         async with async_session() as session:
-            statement = select(Room).where(Room.roomId == room_id)
-            result = await session.execute(statement)
-            room = result.scalars().first()
-            
-            if not room:
-                # Room does not exist. 
-                # In Phase 4, we DO NOT auto-create rooms via WS anymore.
-                # Must use REST API.
-                logger.warning("Connection rejected: Room not found", extra={"error_code": ErrorCode.ROOM_NOT_FOUND})
-                await websocket.close(code=4004, reason="Room not found. Please create one first.")
+            member = await load_room_member(session, room_id, normalized_name)
+            if not member:
+                room_result = await session.execute(select(Room).where(Room.room_code == room_id))
+                if room_result.scalars().first():
+                    await websocket.close(code=4001, reason="Unauthorized")
+                else:
+                    await websocket.close(code=4004, reason="Room not found")
                 return
 
-            # Auth Check
-            role = "guest"
-            if token == room.adminToken:
-                role = "admin"
-            elif token == room.joinToken:
-                role = "member"
-            else:
-                logger.warning("Connection rejected: Invalid token", extra={"error_code": ErrorCode.AUTH_INVALID_TOKEN})
-                await websocket.close(code=4001, reason="Unauthorized: Invalid Token")
-                return
-
-        # 2. Connect
         try:
-            await manager.connect(websocket, room_id, role)
+            await manager.connect(websocket, room_id, member.user.id, member.user.name)
         except WebSocketDisconnect:
             return
 
-        # 3. Send Initial Snapshot
-        # Re-fetch with items loaded
-        read_start = time.time()
-        async with async_session() as session:
-            snapshot = await get_room_snapshot(session, room_id)
-            metrics.track_db_latency(read_start, is_write=False)
-            
-            # If admin, we could include adminToken in payload, but usually not needed in snapshot
-            # Frontend already has it from URL/LocalStorage
-            await websocket.send_json({
-                "type": "snapshot",
-                "payload": snapshot,
-                "role": role # Tell frontend its role
-            })
-            
-        # Initialize Cache
+        await emit_room_snapshot(room_id, manager.get_connections(room_id))
+
         if room_id not in room_event_cache:
             room_event_cache[room_id] = deque(maxlen=EVENT_HISTORY_LIMIT)
 
-        # 4. Event Loop
         try:
             while True:
                 data = await websocket.receive_json()
                 event_type, payload, client_event_id = parse_event_message(data)
-                if not event_type or not payload:
+                if not event_type or payload is None:
                     continue
-                
-                metrics.track_event()
 
-                # Idempotency Check
-                if client_event_id and client_event_id in room_event_cache.get(room_id, []):
-                    logger.info(f"Duplicate event ignored: {client_event_id}")
-                    continue
-                
                 if event_type == "pong":
                     continue
 
-                # --- Security: Rate Limiting ---
-                # Key: roomId:userName (User level limiting)
-                limit_key = f"{room_id}:{user_name}"
-                if not rate_limiter.check_limit(limit_key):
-                    logger.warning(f"Rate limit exceeded for {user_name}")
-                    try:
-                        await websocket.send_json({
-                            "type": "error", 
-                            "payload": {"message": "You are doing that too fast!"}
-                        })
-                    except Exception:
-                         # Client likely disconnected, just stop processing
-                         break
+                metrics.track_event()
+
+                if client_event_id and client_event_id in room_event_cache.get(room_id, []):
+                    continue
+
+                if not rate_limiter.check_limit(f"{room_id}:{member.user.id}"):
+                    await send_error_message(websocket, "You are doing that too fast.")
                     continue
 
                 updated = False
-                
-                # Measure DB Transaction Time
+                should_refresh = False
                 db_start = time.time()
-                
+
                 async with async_session() as session:
-                    statement = select(Room).where(Room.roomId == room_id).options(selectinload(Room.items))
-                    result = await session.execute(statement)
-                    current_room = result.scalars().first()
-                    
-                    if not current_room: continue
+                    room = await load_room_state(session, room_id)
+                    if not room:
+                        await websocket.close(code=4004, reason="Room not found")
+                        return
 
-                    # Permission Check Helper
-                    is_admin = (role == "admin")
-                    
-                    # Log Context with Event ID
-                    log_extra = {"event_id": client_event_id} if client_event_id else {}
-                    
+                    timestamp = get_current_timestamp()
+
                     if event_type == "item_add":
-                        # Member & Admin can add
-                        if len(current_room.items) >= MAX_ITEMS_PER_ROOM:
-                            await websocket.send_json({"type": "error", "payload": {"message": "Room limit reached"}})
-                            logger.warning("Item limit reached", extra={**log_extra, "error_code": ErrorCode.ITEM_LIMIT_REACHED})
+                        title = sanitize_title(payload.get("title") or payload.get("text"))
+                        if not title:
+                            await send_error_message(websocket, "Quest name is required.")
                             continue
 
-                        raw_text = payload.get("text")
-                        # --- Security: Sanitization ---
-                        text = sanitize_text(raw_text)
+                        active_items = [item for item in room.items if not item.is_deleted]
+                        if len(active_items) >= MAX_ITEMS_PER_ROOM:
+                            await send_error_message(websocket, "Room limit reached.")
+                            continue
 
-                        # Priority validation
-                        raw_priority = payload.get("priority")
                         try:
-                            priority = validate_priority(raw_priority)
-                        except ValueError as e:
-                            try:
-                                await websocket.send_json({"type": "error", "payload": {"message": str(e)}})
-                            except Exception:
-                                break
-                            logger.warning("Invalid priority", extra={**log_extra, "priority": raw_priority})
+                            reward_gp = validate_reward_gp(payload.get("rewardGp"))
+                        except ValueError as exc:
+                            await send_error_message(websocket, str(exc))
                             continue
 
-                        if text:
-                            new_item = TodoItem(
-                                text=text[:MAX_ITEM_LENGTH],
-                                priority=priority,
-                                room_db_id=current_room.id
+                        session.add(
+                            TodoItem(
+                                room_id=room.id,
+                                title=title[:MAX_ITEM_LENGTH],
+                                reward_gp=reward_gp,
+                                source_type="manual",
+                                created_by_user_id=member.user.id,
                             )
-                            session.add(new_item)
-                            updated = True
-                            logger.info("Item added", extra={**log_extra, "item_text_len": len(text), "priority": priority})
-
-                    elif event_type == "item_toggle":
-                        item_id = payload.get("itemId")
-                        done = payload.get("done")
-                        target = next((i for i in current_room.items if i.id == item_id), None)
-                        if target and target.done != done:
-                            target.done = done
-                            target.doneBy = user_name if done else None
-                            target.updatedAt = get_current_timestamp()
-                            session.add(target)
-                            updated = True
-                            logger.info("Item toggled", extra={**log_extra, "item_id": item_id, "done": done})
+                        )
+                        updated = True
 
                     elif event_type == "item_edit":
                         item_id = payload.get("itemId")
-                        raw_text = payload.get("text")
-                        raw_priority = payload.get("priority")
+                        target = next((item for item in room.items if item.id == item_id and not item.is_deleted), None)
+                        if not target:
+                            await send_error_message(websocket, "Quest not found.")
+                            continue
 
-                        # Priority validation (optional field)
-                        priority = None
-                        if raw_priority is not None:
+                        reward_gp = None
+                        if "rewardGp" in payload:
                             try:
-                                priority = validate_priority(raw_priority)
-                            except ValueError as e:
-                                try:
-                                    await websocket.send_json({"type": "error", "payload": {"message": str(e)}})
-                                except Exception:
-                                    break
-                                logger.warning("Invalid priority", extra={**log_extra, "priority": raw_priority})
+                                reward_gp = validate_reward_gp(payload.get("rewardGp"))
+                            except ValueError as exc:
+                                await send_error_message(websocket, str(exc))
                                 continue
 
-                        target = next((i for i in current_room.items if i.id == item_id), None)
-                        if target:
-                            changed = apply_item_edit(
-                                target=target,
-                                raw_text=raw_text,
-                                priority=priority,
-                                updated_at=get_current_timestamp(),
-                            )
-                            if changed:
-                                session.add(target)
-                                updated = True
-                            logger.info("Item edited", extra={**log_extra, "item_id": item_id, "has_priority": priority is not None})
+                        changed = apply_item_edit(
+                            target,
+                            payload.get("title") or payload.get("text"),
+                            reward_gp,
+                            timestamp,
+                        )
+                        if changed:
+                            session.add(target)
+                            if target.done:
+                                ledger_result = await session.execute(
+                                    select(GpLedger)
+                                    .where(GpLedger.todo_item_id == target.id, GpLedger.reversed_at.is_(None))
+                                )
+                                for entry in ledger_result.scalars().all():
+                                    entry.gp_delta = target.reward_gp
+                                    entry.todo_title = target.title
+                                    session.add(entry)
+                            if target.auto_quest_id:
+                                auto_quest = next((quest for quest in room.auto_quests if quest.id == target.auto_quest_id), None)
+                                if auto_quest and target.scheduled_date == room_today_context(room.timezone)[1]:
+                                    auto_quest.title = target.title
+                                    auto_quest.reward_gp = target.reward_gp
+                                    auto_quest.updated_at = timestamp
+                                    session.add(auto_quest)
+                            updated = True
+
+                    elif event_type == "item_toggle":
+                        item_id = payload.get("itemId")
+                        done = bool(payload.get("done"))
+                        target = next((item for item in room.items if item.id == item_id and not item.is_deleted), None)
+                        if not target:
+                            await send_error_message(websocket, "Quest not found.")
+                            continue
+
+                        if target.done == done:
+                            continue
+
+                        target.done = done
+                        target.updated_at = timestamp
+                        if done:
+                            target.completed_by_user_id = member.user.id
+                            target.completed_at = timestamp
+                            await award_gp(session, room, target, member.user.id, timestamp)
+                        else:
+                            target.completed_by_user_id = None
+                            target.completed_at = None
+                            await reverse_active_ledger(session, target, timestamp)
+                        session.add(target)
+                        updated = True
 
                     elif event_type == "item_delete":
                         item_id = payload.get("itemId")
-                        target = next((i for i in current_room.items if i.id == item_id), None)
-                        if target:
-                            await session.delete(target)
-                            updated = True
-                            logger.info("Item deleted", extra={**log_extra, "item_id": item_id})
-                    
-                    # --- Admin Only Actions ---
-                    
-                    elif event_type == "room_rename":
-                        if not is_admin:
-                            await websocket.send_json({"type": "error", "payload": {"message": "Admin only"}})
-                            logger.warning("Unauthorized rename attempt", extra={**log_extra, "error_code": ErrorCode.AUTH_NO_PERMISSION})
+                        target = next((item for item in room.items if item.id == item_id and not item.is_deleted), None)
+                        if not target:
+                            await send_error_message(websocket, "Quest not found.")
                             continue
-                        
-                        raw_name = payload.get("roomName")
-                        # --- Security: Sanitization ---
-                        new_name = sanitize_text(raw_name)
-                        
-                        if new_name:
-                            current_room.roomName = new_name[:50]
-                            session.add(current_room)
-                            updated = True
-                            logger.info("Room renamed", extra={**log_extra, "new_name": new_name})
 
-                    elif event_type == "room_clear_done":
-                        if not is_admin:
-                            await websocket.send_json({"type": "error", "payload": {"message": "Admin only"}})
-                            continue
-                        
-                        # Delete completed items
-                        count_deleted = 0
-                        for item in current_room.items:
-                            if item.done:
-                                await session.delete(item)
-                                count_deleted += 1
+                        target.is_deleted = True
+                        target.updated_at = timestamp
+                        session.add(target)
                         updated = True
-                        logger.info("Room cleared", extra={**log_extra, "count": count_deleted})
 
-                    # --- Commit & Broadcast ---
+                    elif event_type == "auto_quest_create":
+                        title = sanitize_title(payload.get("title"))
+                        if not title:
+                            await send_error_message(websocket, "Auto Quest name is required.")
+                            continue
 
-                    if updated:
-                        current_room.version += 1
-                        current_room.updatedAt = get_current_timestamp()
-                        session.add(current_room)
-                        
-                        await session.commit()
-                        await session.refresh(current_room) 
-                        
-                        # Record Latency
-                        metrics.track_db_latency(db_start, is_write=True)
-                        
-                        if client_event_id:
-                            if room_id not in room_event_cache:
-                                room_event_cache[room_id] = deque(maxlen=EVENT_HISTORY_LIMIT)
-                            room_event_cache[room_id].append(client_event_id)
+                        if len(room.auto_quests) >= MAX_AUTO_QUESTS_PER_ROOM:
+                            await send_error_message(websocket, "Auto Quest limit reached.")
+                            continue
 
-                        snapshot = await get_room_snapshot(session, room_id)
-                        await manager.broadcast(room_id, {
-                            "type": "snapshot",
-                            "payload": snapshot
-                        })
+                        try:
+                            reward_gp = validate_reward_gp(payload.get("rewardGp"))
+                            repeat_mask = repeat_days_to_mask(payload.get("repeatDays") or [])
+                        except ValueError as exc:
+                            await send_error_message(websocket, str(exc))
+                            continue
+
+                        if repeat_mask == 0:
+                            await send_error_message(websocket, "Pick at least one repeat day.")
+                            continue
+
+                        session.add(
+                            AutoQuest(
+                                room_id=room.id,
+                                title=title[:MAX_ITEM_LENGTH],
+                                reward_gp=reward_gp,
+                                repeat_mask=repeat_mask,
+                                is_enabled=bool(payload.get("isEnabled", True)),
+                                created_by_user_id=member.user.id,
+                            )
+                        )
+                        updated = True
+                        should_refresh = True
+
+                    elif event_type == "auto_quest_update":
+                        auto_quest_id = payload.get("autoQuestId")
+                        target = next((quest for quest in room.auto_quests if quest.id == auto_quest_id), None)
+                        if not target:
+                            await send_error_message(websocket, "Auto Quest not found.")
+                            continue
+
+                        if "title" in payload:
+                            title = sanitize_title(payload.get("title"))
+                            if not title:
+                                await send_error_message(websocket, "Auto Quest name is required.")
+                                continue
+                            target.title = title[:MAX_ITEM_LENGTH]
+
+                        if "rewardGp" in payload:
+                            try:
+                                target.reward_gp = validate_reward_gp(payload.get("rewardGp"))
+                            except ValueError as exc:
+                                await send_error_message(websocket, str(exc))
+                                continue
+
+                        if "repeatDays" in payload:
+                            try:
+                                repeat_mask = repeat_days_to_mask(payload.get("repeatDays") or [])
+                            except ValueError as exc:
+                                await send_error_message(websocket, str(exc))
+                                continue
+                            if repeat_mask == 0:
+                                await send_error_message(websocket, "Pick at least one repeat day.")
+                                continue
+                            target.repeat_mask = repeat_mask
+
+                        if "isEnabled" in payload:
+                            target.is_enabled = bool(payload.get("isEnabled"))
+
+                        target.updated_at = timestamp
+                        session.add(target)
+                        await sync_today_item_with_auto_quest(session, room, target)
+                        updated = True
+                        should_refresh = True
+
+                    elif event_type == "auto_quest_toggle":
+                        auto_quest_id = payload.get("autoQuestId")
+                        target = next((quest for quest in room.auto_quests if quest.id == auto_quest_id), None)
+                        if not target:
+                            await send_error_message(websocket, "Auto Quest not found.")
+                            continue
+                        target.is_enabled = bool(payload.get("isEnabled"))
+                        target.updated_at = timestamp
+                        session.add(target)
+                        updated = True
+                        should_refresh = True
+
+                    else:
+                        await send_error_message(websocket, "Unsupported event.")
+                        continue
+
+                    if not updated:
+                        continue
+
+                    room.updated_at = timestamp
+                    room.last_activity_at = timestamp
+                    session.add(room)
+                    await session.commit()
+                    metrics.track_db_latency(db_start, is_write=True)
+
+                if client_event_id:
+                    room_event_cache.setdefault(room_id, deque(maxlen=EVENT_HISTORY_LIMIT)).append(client_event_id)
+
+                if should_refresh:
+                    async with async_session() as refresh_session:
+                        refreshed_room = await load_room_state(refresh_session, room_id)
+                        if refreshed_room:
+                            await ensure_today_auto_quests(refresh_session, refreshed_room)
+                            await refresh_session.commit()
+
+                await emit_room_snapshot(room_id)
 
         except WebSocketDisconnect:
-            with LogContext(room_id=room_id, user=user_name, conn_id=conn_id):
-                 manager.disconnect(websocket, room_id)
-        except Exception as e:
-            with LogContext(room_id=room_id, user=user_name, conn_id=conn_id):
-                logger.error(f"Unexpected error: {e}", exc_info=True)
-                metrics.track_error()
-                manager.disconnect(websocket, room_id)
+            manager.disconnect(websocket, room_id)
+            await emit_room_snapshot(room_id)
+        except Exception:
+            logger.error("Unexpected websocket error", exc_info=True)
+            metrics.track_error()
+            manager.disconnect(websocket, room_id)
+            await emit_room_snapshot(room_id)

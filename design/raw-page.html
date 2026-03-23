@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel List Prototype</title>
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --text-main: #1e2022;
+            --text-muted: #8a8f98;
+            --primary-orange: #f29e4c;
+            --primary-blue: #3b82f6;
+            --primary-yellow: #fde047;
+            --border-dark: #1e2022;
+            --border-light: #e5e7eb;
+            --shadow-color: #e5e7eb;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: #cbd5e1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        /* 模拟手机外壳 */
+        .app-container {
+            width: 375px;
+            height: 812px;
+            background-color: var(--bg-color);
+            border-radius: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+            border: 8px solid #1e293b;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 隐藏滚动条但保留滚动功能 */
+        .page {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            background-color: var(--bg-color);
+        }
+
+        .page::-webkit-scrollbar { display: none; }
+        .page { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* ================== 页面1：登录页 ================== */
+        #page-login {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 24px 40px;
+            z-index: 2;
+        }
+
+        .logo-box {
+            width: 64px;
+            height: 64px;
+            background-color: #fdf3e7;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .logo-box svg {
+            width: 32px;
+            height: 32px;
+            fill: var(--primary-orange);
+        }
+
+        h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; color: var(--text-main); }
+        .subtitle { color: #64748b; font-size: 15px; margin-bottom: 32px; font-weight: 500;}
+
+        .hero-img {
+            width: 100%;
+            height: 200px;
+            border: 3px solid var(--border-dark);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 4px 4px 0px #cbd5e1;
+            margin-bottom: 32px;
+            background-color: #fff;
+        }
+
+        .hero-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .input-group { width: 100%; margin-bottom: 20px; }
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper { position: relative; width: 100%; }
+        .input-wrapper svg {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            fill: #94a3b8;
+        }
+
+        .input-wrapper input {
+            width: 100%;
+            padding: 14px 14px 14px 40px;
+            border: 1px solid var(--border-light);
+            background-color: #fff;
+            border-radius: 4px;
+            font-size: 15px;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.2s;
+        }
+        .input-wrapper input:focus { border-color: var(--primary-orange); }
+
+        .btn-start {
+            width: 100%;
+            background-color: var(--primary-orange);
+            color: white;
+            border: 3px solid var(--border-dark);
+            padding: 16px;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 700;
+            box-shadow: 4px 4px 0px var(--border-dark);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+            margin-bottom: 24px;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .btn-start:active {
+            transform: translate(4px, 4px);
+            box-shadow: 0px 0px 0px var(--border-dark);
+        }
+
+        .footer-note { font-size: 13px; color: #64748b; font-weight: 500; }
+
+        /* ================== 页面2：任务列表 ================== */
+        #page-todo {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(20px);
+            background-image: 
+                linear-gradient(to right, #f1f5f9 1px, transparent 1px),
+                linear-gradient(to bottom, #f1f5f9 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-color: #fafaf9;
+            z-index: 1;
+        }
+
+        #page-todo.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(0);
+            z-index: 3;
+        }
+
+        /* 头部 */
+        .header {
+            background: #fff;
+            padding: 24px 20px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-light);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .h-left { display: flex; align-items: center; gap: 12px; }
+        .avatar-main {
+            width: 44px; height: 44px; border-radius: 50%;
+            background-color: #72b095; padding: 2px; position: relative;
+        }
+        .avatar-main img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .status-dot {
+            width: 12px; height: 12px; background-color: #22c55e;
+            border: 2px solid #fff; border-radius: 50%;
+            position: absolute; bottom: -2px; right: -2px;
+        }
+
+        .title-box { display: flex; flex-direction: column; }
+        .t-sub { font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1px; }
+        .t-main { font-size: 18px; font-weight: 800; }
+
+        .h-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+        .room-id { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+        .room-id span { color: var(--text-main); font-size: 14px; }
+        
+        .member-group { display: flex; align-items: center; }
+        .member-group img, .member-add {
+            width: 24px; height: 24px; border-radius: 50%;
+            border: 2px solid #fff; margin-left: -6px;
+        }
+        .member-group img:first-child { margin-left: 0; }
+        .member-add {
+            background-color: #f1f5f9; display: flex; align-items: center; justify-content: center;
+            color: #64748b; font-size: 14px; font-weight: bold; cursor: pointer;
+        }
+
+        /* 列表区域 */
+        .list-body { padding: 20px; padding-bottom: 140px; }
+        .section-title {
+            display: flex; align-items: center; gap: 8px; font-size: 12px;
+            font-weight: 700; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 16px;
+        }
+
+        .task-list { display: flex; flex-direction: column; gap: 12px; }
+        .task-card {
+            background: #fff; border: 2px solid var(--border-light); border-radius: 8px;
+            padding: 16px; display: flex; align-items: flex-start; gap: 12px;
+            box-shadow: 3px 3px 0px var(--shadow-color); transition: all 0.2s; position: relative;
+        }
+        .task-card.active-editing {
+            border-color: var(--primary-yellow); box-shadow: 3px 3px 0px #fef08a;
+        }
+
+        /* 自定义复选框 */
+        .checkbox-container {
+            position: relative; width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; cursor: pointer;
+        }
+        .checkbox-container input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .checkmark {
+            position: absolute; top: 0; left: 0; height: 20px; width: 20px;
+            background-color: #fff; border: 1.5px solid #cbd5e1; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .checkbox-container input:checked ~ .checkmark {
+            background-color: var(--primary-yellow); border-color: var(--border-dark);
+        }
+        .checkmark::after {
+            content: ""; display: none; width: 4px; height: 9px;
+            border: solid var(--border-dark); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); margin-bottom: 2px;
+        }
+        .checkbox-container input:checked ~ .checkmark::after { display: block; }
+
+        .task-content { flex-grow: 1; display: flex; flex-direction: column; gap: 4px; }
+        .task-name { font-size: 15px; font-weight: 600; color: var(--text-main); }
+        .task-card.completed .task-name { color: #94a3b8; text-decoration: line-through; }
+        
+        .task-meta { font-size: 12px; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
+        .task-meta.highlight { color: var(--primary-orange); font-weight: 500; }
+        .task-meta img { width: 14px; height: 14px; border-radius: 50%; }
+        
+        .task-gp { font-size: 10px; font-weight: 800; color: #eab308; display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+        .coin-icon { width: 14px; height: 14px; background-color: var(--primary-yellow); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #b45309; font-size: 8px; font-weight: 900; flex-shrink: 0;}
+        .coin-icon::before { content: "$"; }
+        
+        .tag-fun {
+            display: inline-block; background-color: #e0f2fe; color: #0284c7;
+            font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+            margin-top: 4px; align-self: flex-start;
+        }
+
+        .icon-trash { fill: #cbd5e1; cursor: pointer; }
+        .icon-trash:hover { fill: #ef4444; }
+
+        /* 底部对话气泡输入框 */
+        .bottom-bubble-container {
+            position: absolute; bottom: 30px; left: 20px; right: 20px; z-index: 20;
+        }
+        .help-badge {
+            background-color: var(--border-dark); color: #fff; font-size: 10px; font-weight: 700;
+            padding: 8px 16px; border-radius: 20px; display: flex; align-items: center; justify-content: center;
+            gap: 6px; margin: 0 auto 12px; width: fit-content; letter-spacing: 0.5px;
+            cursor: pointer; border: 2px solid var(--border-dark); box-shadow: 2px 2px 0 #94a3b8;
+            transition: all 0.1s;
+        }
+        .help-badge:active { transform: translate(2px, 2px); box-shadow: 0 0 0 #94a3b8; }
+        .help-badge b { color: var(--primary-yellow); font-size: 12px; }
+        .chat-bubble {
+            background: #fff; border: 4px solid var(--border-dark); border-radius: 24px;
+            padding: 20px; box-shadow: 6px 6px 0px var(--border-dark); position: relative;
+        }
+        .chat-bubble::after {
+            content: ''; position: absolute; bottom: -12px; left: 32px; width: 16px; height: 16px;
+            background-color: #fff; border-bottom: 4px solid var(--border-dark); border-left: 4px solid var(--border-dark);
+            transform: rotate(-45deg); border-bottom-left-radius: 3px; z-index: 1;
+        }
+        .bubble-input {
+            width: 100%; border: none; font-size: 20px; font-weight: 800; color: #334155;
+            outline: none; background: transparent; padding-bottom: 12px;
+        }
+        .bubble-input::placeholder { color: #64748b; font-weight: 700; }
+        .bubble-divider { height: 2px; background-color: #f1f5f9; margin-bottom: 16px; width: 100%; }
+        .bubble-actions { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2; }
+        .bubble-pills { display: flex; gap: 8px; }
+        .b-pill {
+            display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+            border: 2px solid var(--border-dark); border-radius: 12px;
+            font-size: 14px; font-weight: 500; color: var(--text-main); cursor: pointer;
+        }
+        .pill-yellow { background-color: #fef08a; font-weight: 700; }
+        .pill-white { background-color: #fff; }
+        .pill-white b { font-weight: 800; }
+        
+        .btn-add {
+            width: 48px; height: 48px; background-color: var(--primary-yellow);
+            border: 4px solid var(--border-dark); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 4px 4px 0px var(--border-dark); cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn-add:active { transform: translate(4px, 4px); box-shadow: 0px 0px 0px var(--border-dark); }
+        .btn-add svg { stroke: var(--border-dark); stroke-width: 3.5; width: 24px; height: 24px; }
+
+
+        /* ================== 页面3：自动任务 (Auto Quest) ================== */
+        #page-auto-quest {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(20px);
+            background-image: 
+                linear-gradient(to right, #f1f5f9 1px, transparent 1px),
+                linear-gradient(to bottom, #f1f5f9 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-color: #fafaf9;
+            z-index: 4;
+        }
+
+        #page-auto-quest.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(0);
+        }
+
+        .header-simple {
+            background: #fff;
+            padding: 24px 20px 16px;
+            display: flex;
+            align-items: center;
+            border-bottom: 2px solid var(--border-dark);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            gap: 16px;
+        }
+        .btn-back {
+            background: none; border: 2px solid var(--border-dark); border-radius: 8px;
+            width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 2px 2px 0 var(--border-dark);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn-back:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--border-dark); }
+        .btn-back svg { width: 20px; height: 20px; stroke: var(--border-dark); stroke-width: 3; }
+        .header-simple h2 { font-size: 20px; font-weight: 800; color: var(--text-main); }
+
+        /* 空状态 */
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 80px 20px; text-align: center;
+        }
+        .empty-icon {
+            font-size: 64px; margin-bottom: 16px; opacity: 0.5; filter: grayscale(1);
+        }
+        .empty-state h3 { font-size: 18px; font-weight: 800; margin-bottom: 8px; color: var(--text-main); }
+        .empty-state p { font-size: 14px; font-weight: 500; color: var(--text-muted); line-height: 1.5; }
+
+        /* 底部巨大悬浮按钮 */
+        .bottom-fixed-btn {
+            position: absolute; bottom: 30px; left: 20px; right: 20px; z-index: 20;
+            display: flex; justify-content: center;
+        }
+        .btn-capsule {
+            background-color: var(--primary-yellow);
+            color: var(--border-dark);
+            border: 4px solid var(--border-dark);
+            border-radius: 999px;
+            padding: 16px 32px;
+            font-size: 16px;
+            font-weight: 800;
+            display: flex; align-items: center; gap: 8px;
+            box-shadow: 4px 4px 0 var(--border-dark);
+            cursor: pointer; transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn-capsule:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--border-dark); }
+        .btn-capsule svg { width: 20px; height: 20px; stroke: var(--border-dark); stroke-width: 3; }
+
+        /* 列表容器 */
+        .auto-quest-list { padding: 20px; padding-bottom: 100px; display: none; flex-direction: column; gap: 16px; }
+
+        /* 滑动删除包裹层 (CSS 悬停实现) */
+        .swipe-wrapper {
+            position: relative; overflow: hidden; border-radius: 12px;
+            border: 3px solid var(--border-dark); box-shadow: 4px 4px 0 var(--shadow-color);
+            background: #ef4444; /* 底部红色 */
+        }
+        .swipe-wrapper:hover .swipe-content { transform: translateX(-80px); }
+        
+        .delete-bg {
+            position: absolute; right: 0; top: 0; bottom: 0; width: 80px;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; cursor: pointer;
+        }
+        .delete-bg svg { width: 28px; height: 28px; fill: #fff; }
+
+        .swipe-content {
+            background: #fff; padding: 16px; display: flex; justify-content: space-between; align-items: center;
+            position: relative; z-index: 2; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border-right: 3px solid var(--border-dark);
+        }
+
+        .aq-info { display: flex; flex-direction: column; gap: 6px; }
+        .aq-title { font-size: 16px; font-weight: 700; color: var(--text-main); }
+        .aq-repeat { font-size: 12px; font-weight: 600; color: #64748b; }
+
+        /* 粗野风开关滑块 */
+        .brutal-switch {
+            width: 52px; height: 30px; border: 3px solid var(--border-dark); border-radius: 15px;
+            background: #e2e8f0; position: relative; cursor: pointer; transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .brutal-switch.on { background: var(--primary-yellow); }
+        .brutal-switch::after {
+            content: ''; position: absolute; width: 20px; height: 20px;
+            border: 3px solid var(--border-dark); border-radius: 50%; background: #fff;
+            top: 2px; left: 2px; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .brutal-switch.on::after { transform: translateX(20px); }
+
+        /* ================== 抽屉弹窗 (Add Auto Quest) ================== */
+        .drawer-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.4); z-index: 30;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .drawer-overlay.show { opacity: 1; pointer-events: auto; }
+        
+        .drawer-panel {
+            position: absolute; bottom: 0; left: 0; right: 0; background: #fff;
+            border-top: 4px solid var(--border-dark); border-radius: 32px 32px 0 0;
+            padding: 32px 24px 48px; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+            z-index: 31; display: flex; flex-direction: column; gap: 20px;
+        }
+        .drawer-overlay.show + .drawer-panel { transform: translateY(0); }
+        
+        .drawer-header { display: flex; justify-content: space-between; align-items: center; }
+        .drawer-header h3 { font-size: 20px; font-weight: 800; }
+        .btn-close { background: none; border: none; cursor: pointer; }
+        .btn-close svg { width: 24px; height: 24px; stroke: var(--text-muted); stroke-width: 2.5; }
+
+        .form-field { display: flex; flex-direction: column; gap: 8px; }
+        .form-field label { font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); letter-spacing: 1px; }
+        .brutal-input {
+            width: 100%; padding: 14px 16px; border: 3px solid var(--border-dark); border-radius: 12px;
+            font-size: 16px; font-weight: 700; color: var(--text-main); outline: none;
+            box-shadow: 3px 3px 0 var(--shadow-color); transition: border-color 0.2s;
+        }
+        .brutal-input:focus { border-color: var(--primary-blue); box-shadow: 3px 3px 0 #bfdbfe; }
+
+        .days-picker { display: flex; justify-content: space-between; margin-top: 4px; }
+        .day-btn {
+            width: 36px; height: 36px; border: 3px solid var(--border-dark); border-radius: 50%;
+            background: #fff; font-size: 12px; font-weight: 800; color: var(--text-muted);
+            cursor: pointer; transition: all 0.1s; display: flex; align-items: center; justify-content: center;
+        }
+        .day-btn.selected {
+            background: var(--primary-yellow); color: var(--border-dark);
+            box-shadow: 2px 2px 0 var(--border-dark); transform: translate(-2px, -2px);
+        }
+
+        .btn-save {
+            margin-top: 10px; width: 100%; padding: 16px; background: var(--border-dark); color: #fff;
+            border: none; border-radius: 12px; font-size: 16px; font-weight: 800; cursor: pointer;
+            box-shadow: 4px 4px 0 #94a3b8; transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn-save:active { transform: translate(4px, 4px); box-shadow: 0 0 0 #94a3b8; }
+
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    
+    <!-- 页面 1：登录界面 -->
+    <div id="page-login" class="page">
+        <div class="logo-box">
+            <svg viewBox="0 0 24 24"><path d="M4 22V10l4-4v4h8V6l4 4v12H4zm2-2h12v-8h-2v4h-8v-4H6v8zm4-8h4V8h-4v4z"/></svg>
+        </div>
+        <h1>Pixel List</h1>
+        <p class="subtitle">Adventures in organizing together.</p>
+
+        <div class="hero-img">
+            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop" alt="Abstract Landscape">
+        </div>
+
+        <div class="input-group">
+            <label>ROOM ID</label>
+            <div class="input-wrapper">
+                <svg viewBox="0 0 24 24"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+                <input type="text" placeholder="Enter code...">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>YOUR NAME</label>
+            <div class="input-wrapper">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                <input type="text" placeholder="Adventurer name">
+            </div>
+        </div>
+
+        <button id="btn-start" class="btn-start">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M14.5 9.5L16 8l4 4-4 4-1.5-1.5L17 12H3v-2h14l-2.5-2.5z"/></svg>
+            START QUEST
+        </button>
+
+        <span class="footer-note">No login required. Just share the code!</span>
+    </div>
+
+    <!-- 页面 2：任务列表界面 -->
+    <div id="page-todo" class="page">
+        <div class="header">
+            <div class="h-left">
+                <div class="avatar-main">
+                    <img src="https://i.pravatar.cc/150?u=cat" alt="User Avatar">
+                    <div class="status-dot"></div>
+                </div>
+                <div class="title-box">
+                    <span class="t-sub">TITLE</span>
+                    <span class="t-main">我的房间</span>
+                </div>
+            </div>
+            
+            <div class="h-right">
+                <div class="room-id">ID <span>#8X92</span></div>
+                <div class="member-group">
+                    <img src="https://i.pravatar.cc/100?u=bear" alt="Bear">
+                    <img src="https://i.pravatar.cc/100?u=frog" alt="Frog">
+                    <div class="member-add">+</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="list-body">
+            <div class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                TODAY'S QUEST
+            </div>
+
+            <div class="task-list">
+                <div class="task-card">
+                    <label class="checkbox-container"><input type="checkbox"><span class="checkmark"></span></label>
+                    <div class="task-content">
+                        <div class="task-name">Buy almond milk</div>
+                        <div class="task-meta">Added by @PixelCat</div>
+                        <div class="task-gp"><div class="coin-icon"></div> +10 GP</div>
+                    </div>
+                </div>
+
+                <div class="task-card completed">
+                    <label class="checkbox-container"><input type="checkbox" checked><span class="checkmark"></span></label>
+                    <div class="task-content">
+                        <div class="task-name">Finish the project mockup</div>
+                        <div class="task-meta">Completed by @PixelBear</div>
+                        <div class="task-gp"><div class="coin-icon"></div> +10 GP</div>
+                    </div>
+                </div>
+
+                <div class="task-card active-editing">
+                    <label class="checkbox-container"><input type="checkbox"><span class="checkmark"></span></label>
+                    <div class="task-content">
+                        <div class="task-name">Walk the dog</div>
+                        <div class="task-meta highlight"><img src="https://i.pravatar.cc/100?u=frog" alt="Frog">Frog is editing...</div>
+                    </div>
+                    <svg class="icon-trash" width="20" height="20" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </div>
+
+                <div class="task-card">
+                    <label class="checkbox-container"><input type="checkbox"><span class="checkmark"></span></label>
+                    <div class="task-content">
+                        <div class="task-name">Plan weekend trip</div>
+                        <div class="task-gp"><div class="coin-icon"></div> +25 GP</div>
+                        <div class="tag-fun">Fun</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部气泡 -->
+        <div class="bottom-bubble-container">
+            <!-- 替换后的 Auto Quest 入口按钮 -->
+            <button class="help-badge" id="btn-auto-quest"><b>⚡</b> Auto quest</button>
+            <div class="chat-bubble">
+                <input type="text" class="bubble-input" placeholder="Laundry Day">
+                <div class="bubble-divider"></div>
+                <div class="bubble-actions">
+                    <div class="bubble-pills">
+                        <button class="b-pill pill-yellow"><div class="coin-icon"></div> 10</button>
+                        <button class="b-pill pill-white">repeat <b>Weekly</b></button>
+                    </div>
+                    <button class="btn-add"><svg viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================== 页面3：Auto Quest (定时任务) ================== -->
+    <div id="page-auto-quest" class="page">
+        <div class="header-simple">
+            <button class="btn-back" id="btn-back-todo">
+                <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            </button>
+            <h2>Auto Quests</h2>
+        </div>
+
+        <!-- 初次进入的空状态 -->
+        <div class="empty-state" id="aq-empty">
+            <div class="empty-icon">🤖</div>
+            <h3>No auto quests yet</h3>
+            <p>Set up recurring tasks and earn GP<br>passively every week!</p>
+        </div>
+
+        <!-- 定时任务列表展示区 -->
+        <div class="auto-quest-list" id="aq-list">
+            <!-- 动态生成的任务会插入到这里 -->
+        </div>
+
+        <!-- 底部新增按钮 -->
+        <div class="bottom-fixed-btn">
+            <button class="btn-capsule" id="btn-open-drawer">
+                <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                New Auto quest
+            </button>
+        </div>
+    </div>
+
+    <!-- 抽屉弹窗：新增定时任务 -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer-panel" id="drawer-panel">
+        <div class="drawer-header">
+            <h3>Add Auto Quest</h3>
+            <button class="btn-close" id="btn-close-drawer"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+
+        <div class="form-field">
+            <label>Quest Name</label>
+            <input type="text" id="aq-input-name" class="brutal-input" placeholder="e.g. Water plants">
+        </div>
+
+        <div class="form-field">
+            <label>Reward (GP)</label>
+            <input type="number" id="aq-input-gp" class="brutal-input" placeholder="10" value="10">
+        </div>
+
+        <div class="form-field">
+            <label>Repeat On</label>
+            <div class="days-picker" id="days-picker">
+                <div class="day-btn" data-day="Sun">S</div>
+                <div class="day-btn" data-day="Mon">M</div>
+                <div class="day-btn" data-day="Tue">T</div>
+                <div class="day-btn" data-day="Wed">W</div>
+                <div class="day-btn" data-day="Thu">T</div>
+                <div class="day-btn" data-day="Fri">F</div>
+                <div class="day-btn" data-day="Sat">S</div>
+            </div>
+        </div>
+
+        <button class="btn-save" id="btn-save-aq">Save Quest</button>
+    </div>
+
+</div>
+
+<script>
+    // --- 页面路由切换 ---
+    const pageLogin = document.getElementById('page-login');
+    const pageTodo = document.getElementById('page-todo');
+    const pageAutoQuest = document.getElementById('page-auto-quest');
+
+    document.getElementById('btn-start').addEventListener('click', () => {
+        pageLogin.style.opacity = '0';
+        pageLogin.style.transform = 'translateX(-20px)';
+        setTimeout(() => {
+            pageLogin.style.display = 'none';
+            pageTodo.classList.add('active');
+        }, 300);
+    });
+
+    document.getElementById('btn-auto-quest').addEventListener('click', () => {
+        pageTodo.classList.remove('active');
+        setTimeout(() => pageAutoQuest.classList.add('active'), 100);
+    });
+
+    document.getElementById('btn-back-todo').addEventListener('click', () => {
+        pageAutoQuest.classList.remove('active');
+        setTimeout(() => pageTodo.classList.add('active'), 100);
+    });
+
+    // --- 抽屉弹窗逻辑 ---
+    const drawerOverlay = document.getElementById('drawer-overlay');
+    const btnOpenDrawer = document.getElementById('btn-open-drawer');
+    const btnCloseDrawer = document.getElementById('btn-close-drawer');
+
+    function openDrawer() { drawerOverlay.classList.add('show'); }
+    function closeDrawer() { drawerOverlay.classList.remove('show'); }
+
+    btnOpenDrawer.addEventListener('click', openDrawer);
+    btnCloseDrawer.addEventListener('click', closeDrawer);
+    drawerOverlay.addEventListener('click', closeDrawer);
+
+    // --- 星期选择逻辑 ---
+    const dayBtns = document.querySelectorAll('.day-btn');
+    dayBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            btn.classList.toggle('selected');
+        });
+    });
+
+    // --- 保存 Auto Quest 并渲染到列表 ---
+    const btnSaveAq = document.getElementById('btn-save-aq');
+    const listContainer = document.getElementById('aq-list');
+    const emptyState = document.getElementById('aq-empty');
+    let taskCount = 0;
+
+    btnSaveAq.addEventListener('click', () => {
+        const nameInput = document.getElementById('aq-input-name').value.trim() || 'Untitled Quest';
+        const gpInput = document.getElementById('aq-input-gp').value || '0';
+        
+        // 获取选中的天数
+        const selectedDays = Array.from(document.querySelectorAll('.day-btn.selected')).map(b => b.dataset.day);
+        let repeatText = 'Never';
+        if (selectedDays.length === 7) repeatText = 'Everyday';
+        else if (selectedDays.length > 0) repeatText = selectedDays.join(', ');
+
+        // 创建新卡片 (支持向左 Hover 滑动删除)
+        const wrapper = document.createElement('div');
+        wrapper.className = 'swipe-wrapper';
+        wrapper.innerHTML = `
+            <div class="delete-bg" onclick="deleteQuest(this)">
+                <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </div>
+            <div class="swipe-content">
+                <div class="aq-info">
+                    <div class="aq-title">${nameInput}</div>
+                    <div class="task-gp" style="margin-top:0"><div class="coin-icon"></div> +${gpInput} GP</div>
+                    <div class="aq-repeat">🔄 ${repeatText}</div>
+                </div>
+                <div class="brutal-switch on" onclick="this.classList.toggle('on')"></div>
+            </div>
+        `;
+
+        listContainer.appendChild(wrapper);
+        taskCount++;
+
+        // 切换空状态
+        emptyState.style.display = 'none';
+        listContainer.style.display = 'flex';
+
+        // 重置表单并关闭抽屉
+        document.getElementById('aq-input-name').value = '';
+        dayBtns.forEach(b => b.classList.remove('selected'));
+        closeDrawer();
+    });
+
+    // --- 删除逻辑 ---
+    window.deleteQuest = function(element) {
+        // 找到父级包裹层并移除
+        const wrapper = element.closest('.swipe-wrapper');
+        wrapper.style.transform = 'scale(0.9)';
+        wrapper.style.opacity = '0';
+        setTimeout(() => {
+            wrapper.remove();
+            taskCount--;
+            if (taskCount === 0) {
+                listContainer.style.display = 'none';
+                emptyState.style.display = 'flex';
+            }
+        }, 200);
+    };
+
+</script>
+
+</body>
+</html>

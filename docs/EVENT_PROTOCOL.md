@@ -1,115 +1,224 @@
 # Event Protocol
 
-This document defines the WebSocket communication protocol between the Client (Next.js) and Server (FastAPI).
+本文件定义当前 ShareList V1 固定房间版本的实时同步协议。
+
+## HTTP Bootstrap
+
+房间页在建立 WebSocket 之前，会先通过 HTTP 拉取一次首屏快照，避免 WebSocket 首帧未及时到达时页面无限 loading。
+
+**URL**
+
+```text
+GET /api/rooms/{roomId}/snapshot?name={userName}
+```
+
+返回体与下文 `snapshot.payload` 一致。
 
 ## Connection
-**URL:** `ws://<host>:8000/ws/{roomId}/{userName}?token=<invite-or-admin-token>`
-**Note:** Token is required for all connections. `roomId` alone does not grant access.
 
-## Data Models
+**URL**
 
-### RoomState
+```text
+ws://<host>:8000/ws/{roomId}/{userName}
+```
+
+**鉴权规则**
+
+- 不再使用 `token`
+- 服务端根据 `room_members` 校验 `roomId + userName`
+- 当前 seed 仅允许：
+  - `roomId = 9999`
+  - `userName = vincent | cindy`
+
+## Snapshot Shape
+
+连接建立成功后，以及每次状态变更后，服务端向客户端发送 `snapshot`：
+
 ```json
 {
-  "roomId": "string",
-  "roomName": "string",
-  "version": number, // Incremental version number
-  "createdAt": number,
-  "updatedAt": number,
-  "joinToken": "string", // Invite token for sharing
-  "items": [TodoItem]
+  "type": "snapshot",
+  "payload": {
+    "room": {
+      "roomId": "9999",
+      "title": "我的房间",
+      "timezone": "Asia/Shanghai"
+    },
+    "currentUser": {
+      "userId": "string",
+      "name": "vincent",
+      "displayName": "Vincent",
+      "avatarUrl": "https://...",
+      "role": "admin",
+      "isOnline": true
+    },
+    "members": [Member],
+    "items": [TodoItem],
+    "autoQuests": [AutoQuest]
+  }
+}
+```
+
+### Member
+
+```json
+{
+  "userId": "string",
+  "name": "vincent",
+  "displayName": "Vincent",
+  "avatarUrl": "https://...",
+  "role": "admin",
+  "isOnline": true
 }
 ```
 
 ### TodoItem
+
 ```json
 {
   "id": "string",
-  "text": "string",
-  "done": boolean,
-  "doneBy": "string | null",
-  "priority": "high" | "medium" | "low",
-  "createdAt": number,
-  "updatedAt": number
+  "title": "Buy almond milk",
+  "done": false,
+  "rewardGp": 10,
+  "sourceType": "manual",
+  "autoQuestId": null,
+  "scheduledDate": null,
+  "createdBy": "vincent",
+  "completedBy": null,
+  "completedAt": null,
+  "createdAt": 1774186661311,
+  "updatedAt": 1774186661311
+}
+```
+
+说明：
+
+- `sourceType = manual | auto_quest`
+- `scheduledDate` 仅自动任务实例使用，格式 `YYYY-MM-DD`
+- `items` 只返回“当前可见任务”：
+  - 手动任务
+  - 当天的自动任务实例
+  - 不返回软删除任务
+
+### AutoQuest
+
+```json
+{
+  "id": "string",
+  "title": "Laundry Day",
+  "rewardGp": 10,
+  "repeatDays": ["Wed", "Fri"],
+  "isEnabled": true,
+  "createdBy": "cindy",
+  "createdAt": 1774186661311,
+  "updatedAt": 1774186661311
 }
 ```
 
 ## Client -> Server Events
 
-The client sends JSON objects with a `type` and `payload`. **All state-modifying payloads must include a `clientEventId`.**
+所有写事件必须在 `payload` 中携带 `clientEventId`。
 
-### 1. Add Item
+### `item_add`
+
 ```json
 {
   "type": "item_add",
   "payload": {
-    "clientEventId": "unique-id-string",
-    "text": "Buy milk",
-    "priority": "high"
+    "clientEventId": "evt-1",
+    "title": "Water plants",
+    "rewardGp": 20
   }
 }
 ```
-Note: `priority` is optional and defaults to "medium". Valid values: "high", "medium", "low".
 
-### 2. Toggle Item
+### `item_edit`
+
+```json
+{
+  "type": "item_edit",
+  "payload": {
+    "clientEventId": "evt-2",
+    "itemId": "todo-id",
+    "title": "Water the plants",
+    "rewardGp": 30
+  }
+}
+```
+
+### `item_toggle`
+
 ```json
 {
   "type": "item_toggle",
   "payload": {
-    "clientEventId": "unique-id-string",
-    "itemId": "uuid-string",
+    "clientEventId": "evt-3",
+    "itemId": "todo-id",
     "done": true
   }
 }
 ```
 
-### 3. Edit Item
-```json
-{
-  "type": "item_edit",
-  "payload": {
-    "clientEventId": "unique-id-string",
-    "itemId": "uuid-string",
-    "text": "Buy almond milk",
-    "priority": "low"
-  }
-}
-```
-Note: Both `text` and `priority` are optional. At least one must be provided.
+完成时会记一笔 GP 流水；取消完成时会把当前有效流水标记回滚。
 
-### 4. Delete Item
+### `item_delete`
+
 ```json
 {
   "type": "item_delete",
   "payload": {
-    "clientEventId": "unique-id-string",
-    "itemId": "uuid-string"
+    "clientEventId": "evt-4",
+    "itemId": "todo-id"
   }
 }
 ```
 
-### 5. Rename Room (Admin Only)
+删除采用软删除，避免 Auto Quest 的当天实例被重复生成。
+
+### `auto_quest_create`
+
 ```json
 {
-  "type": "room_rename",
+  "type": "auto_quest_create",
   "payload": {
-    "clientEventId": "unique-id-string",
-    "roomName": "New Room Name"
+    "clientEventId": "evt-5",
+    "title": "Laundry Day",
+    "rewardGp": 10,
+    "repeatDays": ["Wed", "Sat"]
   }
 }
 ```
 
-### 6. Clear Completed Items (Admin Only)
+### `auto_quest_update`
+
 ```json
 {
-  "type": "room_clear_done",
+  "type": "auto_quest_update",
   "payload": {
-    "clientEventId": "unique-id-string"
+    "clientEventId": "evt-6",
+    "autoQuestId": "auto-id",
+    "title": "Laundry Day",
+    "rewardGp": 20,
+    "repeatDays": ["Wed", "Fri"],
+    "isEnabled": true
   }
 }
 ```
 
-### 7. Pong (Heartbeat)
+### `auto_quest_toggle`
+
+```json
+{
+  "type": "auto_quest_toggle",
+  "payload": {
+    "clientEventId": "evt-7",
+    "autoQuestId": "auto-id",
+    "isEnabled": false
+  }
+}
+```
+
+### `pong`
+
 ```json
 {
   "type": "pong",
@@ -119,49 +228,64 @@ Note: Both `text` and `priority` are optional. At least one must be provided.
 
 ## Server -> Client Events
 
-### 1. Snapshot
-Sent immediately upon connection and after any state change.
-```json
-{
-  "type": "snapshot",
-  "payload": <RoomState Object>,
-  "role": "admin | member"
-}
-```
+### `snapshot`
 
-### 2. Ping (Heartbeat)
-Sent periodically by server to keep connection alive.
+见上文 Snapshot Shape。
+
+### `ping`
+
 ```json
 {
   "type": "ping",
-  "payload": { "ts": 1234567890 }
+  "payload": {
+    "ts": 1774186661311
+  }
 }
 ```
 
-### 3. Error
-Sent when an action is rejected (e.g. room full).
+### `error`
+
 ```json
 {
   "type": "error",
   "payload": {
-    "message": "Room is full (max items reached)."
+    "message": "Quest name is required."
   }
 }
 ```
 
-### 4. Token Rotated
-Sent to all clients when the invite token is reset by an Admin.
+## Profile API
+
+### `GET /api/rooms/{roomId}/profiles/{userId}`
+
+返回：
+
 ```json
 {
-  "type": "token_rotated",
-  "payload": {
-    "newJoinToken": "string"
-  }
+  "userId": "string",
+  "name": "vincent",
+  "displayName": "Vincent",
+  "avatarUrl": "https://...",
+  "rank": "B",
+  "totalGp": 240,
+  "thisWeekGp": 40,
+  "thisWeekCount": 2,
+  "thisMonthGp": 120,
+  "thisMonthCount": 6,
+  "history": [
+    {
+      "id": "ledger-id",
+      "todoItemId": "todo-id",
+      "todoTitle": "Buy almond milk",
+      "gpDelta": 10,
+      "awardedAt": 1774186661311
+    }
+  ]
 }
 ```
 
-## Close Codes (WebSocket)
+## Close Codes
 
-- `4001`: Unauthorized / invalid token
+- `4001`: Unauthorized
 - `4003`: Room full
-- `4004`: Room not found or expired
+- `4004`: Room not found

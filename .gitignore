@@ -32,6 +32,7 @@ ENV/
 .pdm-python
 pip-wheel-metadata/
 *.sqlite3
+sharelist.db
 
 # OS / editor
 .DS_Store

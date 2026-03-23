@@ -1,0 +1,293 @@
+.entryViewport {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  align-items: stretch;
+  padding: 0;
+  background-image:
+    linear-gradient(to right, #f1f5f9 1px, transparent 1px),
+    linear-gradient(to bottom, #f1f5f9 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-color: #fafaf9;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.entryViewport,
+.entryViewport * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.appContainer {
+  width: 100%;
+  min-height: 100svh;
+  background-color: transparent;
+  position: static;
+}
+
+.page {
+  width: 100%;
+  min-height: 100svh;
+  overflow-y: auto;
+  background-color: transparent;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.page::-webkit-scrollbar {
+  display: none;
+}
+
+.pageLogin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100svh;
+  padding: 16px;
+}
+
+.entryShell {
+  width: 100%;
+  max-width: 343px;
+  min-height: calc(100svh - 32px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  margin: 0 auto;
+}
+
+.entryHeroCard,
+.entryFormCard {
+  width: 100%;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+}
+
+.entryHeroCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.entryBrandRow {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.logoBox {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  border-radius: 50%;
+  background-color: #fdf3e7;
+}
+
+.logoBox svg {
+  width: 32px;
+  height: 32px;
+  fill: #f29e4c;
+}
+
+.entryLogoBox {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 0;
+  border: 2px solid #e5e7eb;
+  background: #fff7ed;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  flex-shrink: 0;
+}
+
+.entryBrandCopy {
+  min-width: 0;
+  text-align: center;
+}
+
+.entryKicker {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+}
+
+.entryTitle {
+  margin: 0;
+  max-width: none;
+  text-align: center;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #1e2022;
+}
+
+.entryHeroVisual {
+  width: 100%;
+  height: 164px;
+  overflow: hidden;
+  position: relative;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  background: #e2e8f0;
+}
+
+.entryHeroVisual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 18%;
+  display: block;
+}
+
+.entryFormHead {
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.entryFormTitle {
+  display: inline-flex;
+  margin-bottom: 0;
+}
+
+.sectionTitle,
+.inputGroup label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.inputGroup {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.inputWrapper {
+  position: relative;
+  width: 100%;
+}
+
+.inputWrapper svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  fill: #94a3b8;
+  transform: translateY(-50%);
+}
+
+.inputWrapper input {
+  width: 100%;
+  padding: 14px 14px 14px 40px;
+  border: 2px solid #e5e7eb;
+  background-color: #fff;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #1e2022;
+  outline: none;
+  transition: all 0.2s;
+  box-shadow: 3px 3px 0 #e5e7eb;
+}
+
+.inputWrapper input::placeholder {
+  color: #7f7f7f;
+  font-weight: 400;
+}
+
+.inputWrapper input:focus {
+  border-color: #fde047;
+  box-shadow: 3px 3px 0 #fef08a;
+}
+
+.entryError {
+  margin-top: -2px;
+  margin-bottom: 14px;
+  border: 2px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+  box-shadow: 3px 3px 0 #ffe4e6;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #be123c;
+}
+
+.btnStart {
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  border: 4px solid #1e2022;
+  border-radius: 999px;
+  background-color: #fde047;
+  color: #1e2022;
+  box-shadow: 4px 4px 0 #1e2022;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s,
+    opacity 0.2s;
+}
+
+.btnStart svg {
+  stroke: currentColor;
+  stroke-width: 3;
+  flex-shrink: 0;
+}
+
+.btnStart:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 #1e2022;
+}
+
+.btnStart:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .appContainer {
+    width: 100%;
+    min-height: 100svh;
+  }
+
+  .entryShell {
+    min-height: calc(100svh - 32px);
+  }
+}

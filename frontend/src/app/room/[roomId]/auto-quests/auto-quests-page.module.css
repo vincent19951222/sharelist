@@ -1,0 +1,557 @@
+.autoViewport {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  align-items: stretch;
+  background-image:
+    linear-gradient(to right, #f1f5f9 1px, transparent 1px),
+    linear-gradient(to bottom, #f1f5f9 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-color: #fafaf9;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.autoContainer {
+  width: 100%;
+  min-height: 100svh;
+}
+
+.pageAutoQuest {
+  min-height: 100svh;
+}
+
+.autoInner {
+  width: 100%;
+  max-width: 420px;
+  min-height: 100svh;
+  margin: 0 auto;
+  position: relative;
+}
+
+.stateScreen {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.stateCard {
+  width: 100%;
+  max-width: 360px;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  padding: 24px 20px;
+  text-align: center;
+}
+
+.stateKicker {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.stateTitle {
+  margin: 10px 0 0;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #1e2022;
+}
+
+.stateText {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.stateAction {
+  width: 100%;
+  margin-top: 18px;
+  border: 4px solid #1e2022;
+  border-radius: 999px;
+  background-color: #fde047;
+  color: #1e2022;
+  box-shadow: 4px 4px 0 #1e2022;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.spinnerRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.headerSimple {
+  background: #fff;
+  padding: 24px 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.btnBack {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  cursor: pointer;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
+}
+
+.btnBack:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 #e5e7eb;
+}
+
+.btnBack svg {
+  width: 20px;
+  height: 20px;
+  stroke: #1e2022;
+  stroke-width: 3;
+}
+
+.headerSimple h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.feedbackCard {
+  margin: 16px 20px 0;
+  background: #fff7ed;
+  border: 2px solid #fed7aa;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 #ffedd5;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c2410c;
+}
+
+.autoQuestStage {
+  min-height: calc(100svh - 85px);
+  padding: 20px 20px 120px;
+}
+
+.aqStack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.aqCardLarge {
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+}
+
+.aqEditableCard {
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.aqEditableCard:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #e5e7eb;
+}
+
+.aqCardCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.aqCardTitle {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.aqMetaBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.taskGp {
+  font-size: 10px;
+  font-weight: 800;
+  color: #eab308;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.coinIcon {
+  width: 14px;
+  height: 14px;
+  background-color: #fde047;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b45309;
+  font-size: 8px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.coinIcon::before {
+  content: "$";
+}
+
+.aqMetaLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.aqRepeatLine {
+  color: #64748b;
+}
+
+.aqRepeatLine svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.aqToggleButton {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.aqToggle {
+  width: 52px;
+  height: 30px;
+  border: 3px solid #1e2022;
+  border-radius: 15px;
+  background: #e2e8f0;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.aqToggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #1e2022;
+  border-radius: 50%;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.aqToggleOn {
+  background: #fde047;
+}
+
+.aqToggleOn::after {
+  left: auto;
+  right: 2px;
+}
+
+.emptyCard {
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  padding: 18px 16px;
+}
+
+.emptyTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.emptyText {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.bottomFixedBtn {
+  position: sticky;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  padding: 18px 20px calc(28px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(250, 250, 249, 0) 0%, rgba(250, 250, 249, 0.88) 18%, #fafaf9 36%);
+}
+
+.btnCapsule {
+  min-width: 236px;
+  padding: 16px 28px;
+  border: 4px solid #1e2022;
+  border-radius: 999px;
+  background: #fde047;
+  color: #1e2022;
+  box-shadow: 4px 4px 0 #1e2022;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
+}
+
+.btnCapsule svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  stroke-width: 3;
+  fill: none;
+}
+
+.btnCapsule:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 #1e2022;
+}
+
+.aqEditorOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.42);
+  z-index: 40;
+}
+
+.aqEditorPanel {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(420px, 100vw);
+  background: #fff;
+  border: 4px solid #1e2022;
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.14);
+  padding: 24px 20px 28px;
+  z-index: 41;
+}
+
+.aqEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.aqEditorKicker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.aqEditorHeader h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #1e2022;
+}
+
+.aqEditorClose {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.aqEditorClose svg {
+  width: 20px;
+  height: 20px;
+  stroke: #1e2022;
+  stroke-width: 2.5;
+}
+
+.aqFormField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.aqFormField label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8f98;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.aqInput {
+  width: 100%;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #1e2022;
+  box-shadow: 3px 3px 0 #e5e7eb;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  outline: none;
+}
+
+.aqInput:focus {
+  border-color: #fde047;
+  box-shadow: 3px 3px 0 #fef08a;
+}
+
+.aqSelect {
+  appearance: none;
+}
+
+.aqDayGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.aqDayBtn {
+  width: 100%;
+  height: 40px;
+  border: 2px solid #1e2022;
+  border-radius: 999px;
+  background: #fff;
+  color: #8a8f98;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.aqDayBtnSelected {
+  background: #fde047;
+  color: #1e2022;
+  box-shadow: 2px 2px 0 #1e2022;
+}
+
+.aqSaveBtn {
+  width: 100%;
+  margin-top: 6px;
+  border: 4px solid #1e2022;
+  border-radius: 999px;
+  background: #fde047;
+  color: #1e2022;
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 4px 4px 0 #1e2022;
+  cursor: pointer;
+}
+
+.aqSaveBtn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 #1e2022;
+}
+
+@media (max-width: 480px) {
+  .autoInner {
+    max-width: none;
+  }
+
+  .headerSimple {
+    padding: 22px 16px 14px;
+  }
+
+  .feedbackCard {
+    margin: 16px 16px 0;
+  }
+
+  .autoQuestStage {
+    padding: 18px 16px 112px;
+  }
+
+  .aqCardLarge {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .aqCardTitle {
+    font-size: 18px;
+  }
+
+  .aqToggle {
+    width: 52px;
+    height: 30px;
+  }
+
+  .aqToggle::after {
+    width: 20px;
+    height: 20px;
+  }
+
+  .aqEditorPanel {
+    width: min(100vw, 420px);
+  }
+}

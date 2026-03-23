@@ -1,44 +1,21 @@
-"""
-Unit tests for priority validation
-"""
-
 import os
-import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/sharelist_test")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test-sharelist.db")
 
-from backend.main import validate_priority
+import pytest  # noqa: E402
+
+from backend.main import repeat_days_to_mask, validate_reward_gp  # noqa: E402
 
 
-class TestPriorityValidation:
-    """Test priority validation function"""
+def test_repeat_days_reject_unknown_value():
+    with pytest.raises(ValueError, match="Sun/Mon/Tue/Wed/Thu/Fri/Sat"):
+        repeat_days_to_mask(["Holiday"])
 
-    def test_valid_high_priority(self):
-        """Should accept 'high' priority"""
-        assert validate_priority("high") == "high"
 
-    def test_valid_medium_priority(self):
-        """Should accept 'medium' priority"""
-        assert validate_priority("medium") == "medium"
+def test_reward_gp_accepts_upper_bound():
+    assert validate_reward_gp(999) == 999
 
-    def test_valid_low_priority(self):
-        """Should accept 'low' priority"""
-        assert validate_priority("low") == "low"
 
-    def test_none_defaults_to_medium(self):
-        """Should default to 'medium' when None"""
-        assert validate_priority(None) == "medium"
-
-    def test_invalid_priority_raises_error(self):
-        """Should raise ValueError for invalid priority"""
-        with pytest.raises(ValueError, match="Invalid priority"):
-            validate_priority("urgent")
-
-        with pytest.raises(ValueError, match="Invalid priority"):
-            validate_priority("HIGH")  # Case-sensitive
-
-        with pytest.raises(ValueError, match="Invalid priority"):
-            validate_priority("")
-
-        with pytest.raises(ValueError, match="Invalid priority"):
-            validate_priority("invalid")
+def test_reward_gp_rejects_non_numeric_value():
+    with pytest.raises(ValueError, match="must be a number"):
+        validate_reward_gp("abc")

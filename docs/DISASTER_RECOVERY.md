@@ -55,7 +55,7 @@ npm run db:backup
 3.  **执行恢复**: 运行 `npm run db:restore <最新的备份文件>`。
 4.  **验证业务**: 
     *   启动应用: `npm run dev`
-    *   访问之前的房间链接 (例如 `http://localhost:3000/room/XyZ123`)。
+    *   访问之前的房间链接 (例如 `http://localhost:3333/room/XyZ123`)。
     *   **验收标准**: 房间存在，清单内容与备份时一致，权限正常。
 
 ---

@@ -6,6 +6,9 @@ pydantic
 python-dotenv
 sqlmodel
 asyncpg
+aiosqlite
 alembic
 bleach
 greenlet
+pytest
+httpx

@@ -2,6 +2,37 @@
 
 记录 ShareList 项目从零开始的开发全过程。
 
+## Phase 5: 固定房间 Quest 升级
+**时间**: 2026-03-22  
+**目标**: 将产品从“即时建房 + token 邀请”切到“固定房间 `9999` + 固定成员 + Auto Quest + GP Profile”。
+
+### 核心产出
+* **访问模型重做**
+  * 新增 `POST /api/rooms/access`，入口页改为 `roomId + name` 登录。
+  * WebSocket 鉴权从 token 改为基于 `rooms / users / room_members` 校验。
+  * seed 固定房间 `9999` 与成员 `vincent / cindy` 自动写入数据库。
+  * seed 用户头像改为本地静态资源：`vincent -> /cat.png`，`cindy -> /dog.png`。
+* **后端数据模型升级**
+  * 新增 `users`、`room_members`、`auto_quests`、`gp_ledger` 表。
+  * `todo_items` 升级为支持 `reward_gp`、`source_type`、`scheduled_date`、完成人与软删除。
+  * 固定房间设置 `never_expires=true`，不参与 24h TTL 清理。
+* **实时协议升级**
+  * `snapshot` 改为返回 `room/currentUser/members/items/autoQuests`。
+  * 新增 `auto_quest_create`、`auto_quest_update`、`auto_quest_toggle` 事件。
+  * 保留 `item_add` / `item_edit` / `item_toggle` / `item_delete`，并统一要求 `clientEventId`。
+* **自动任务与积分**
+  * 按上海时区在进房时懒生成当天 Auto Quest 实例。
+  * 勾选完成时生成或激活 GP 流水；取消完成时写 `reversed_at` 回滚。
+  * 新增 `GET /api/rooms/{roomId}/profiles/{userId}`，返回总分、周/月统计、Rank 与历史流水。
+* **前端四页改版**
+  * 首页改为固定房间登录页。
+  * 房间页改成 Quest 面板，接入成员在线态、GP 奖励、Auto Quest 入口。
+  * 新增 Auto Quests 页与 Profile 页。
+  * 移除运行时 create room / invite / recent rooms / priority 筛选流程。
+* **测试与文档**
+  * 重写后端 helper 单测，覆盖 reward、repeat mask、rank、item edit 与 CORS。
+  * 更新 `README.md`、`docs/EVENT_PROTOCOL.md`、`docs/STARTUP_GUIDE.md`、`AGENTS.md`。
+
 ## Phase 1: 项目初始化与 MVP 前端 (Local-Only)
 **时间**: 2026-02-04
 **目标**: 快速搭建 Next.js 项目骨架，实现核心清单功能，验证 UI/UX。
@@ -157,3 +188,88 @@
 *   **测试补齐**:
     *   新增 `backend/tests/test_event_handling.py`，覆盖 payload 缺失、`clientEventId` 提取、priority-only 编辑、CORS 默认值。
     *   保持 `backend/tests/test_priority.py` 回归通过。
+
+---
+
+## Phase 4.4: 本地 SQLite 开发基线与文档对齐
+**时间**: 2026-03-22
+**目标**: 明确“本地 SQLite / 远端 Supabase”双环境策略，减少开发与部署认知混乱。
+
+### 核心产出
+*   **本地默认环境切换**:
+    *   将 `backend/.env` 本地默认值切回 `sqlite+aiosqlite:///./sharelist.db`，确保本地开发零外部依赖。
+    *   新增 `backend/.env.example` 与 `frontend/.env.example`，提供本地开发默认示例。
+*   **文档统一**:
+    *   更新 `README.md` 与 `docs/STARTUP_GUIDE.md`，明确本地使用 SQLite，远端部署保留 Supabase / PostgreSQL 路线。
+    *   更新 `AGENTS.md`，避免协作者误以为本地开发必须依赖云数据库。
+*   **双数据库边界澄清**:
+    *   为 `scripts/db_tool.py` 增加显式提示，说明该脚本仅支持 PostgreSQL / Supabase，不适用于本地 SQLite。
+    *   在启动文档中补充迁移脚本与备份脚本的适用范围说明。
+
+---
+
+## Phase 4.5: 本地开发端口统一
+**时间**: 2026-03-22
+**目标**: 固定本地开发端口约定，避免跨域和环境切换时的端口混乱。
+
+### 核心产出
+*   **本地端口统一**:
+    *   前端开发服务器固定为 `http://localhost:3333`。
+    *   后端开发服务器固定为 `http://localhost:8000`。
+*   **CORS 默认值收敛**:
+    *   后端默认 `CORS_ALLOW_ORIGINS` 调整为 `http://localhost:3333,http://127.0.0.1:3333`。
+    *   本地 `backend/.env` 与示例环境文件同步写入默认白名单，减少首次启动踩坑。
+*   **文档与测试同步**:
+    *   更新 `README.md`、`docs/STARTUP_GUIDE.md`、`docs/DISASTER_RECOVERY.md`、`AGENTS.md` 中的本地地址说明。
+    *   更新 `backend/tests/test_event_handling.py`，显式校验默认 CORS 白名单。
+
+---
+
+## Phase 4.6: 局域网开发默认开箱可用
+**时间**: 2026-03-22
+**目标**: 让 `npm run dev` 默认支持通过局域网 IP 直接访问和登录，减少真机联调配置成本。
+
+### 核心产出
+*   **前后端监听放开**:
+    *   根目录 `npm run dev` 改为前端和后端都监听 `0.0.0.0`，允许同一局域网设备直接访问。
+*   **前端后端地址自动推导**:
+    *   当前端未配置 `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL` 时，自动根据浏览器当前访问主机拼接 `:8000`，兼容 `localhost` 和局域网 IP 两种访问方式。
+*   **开发态 CORS 默认放开**:
+    *   后端默认 `CORS_ALLOW_ORIGINS=*`，避免局域网访问时因 Origin 不在白名单导致登录失败。
+    *   示例环境文件同步更新，并补充生产环境应收紧为显式域名白名单。
+*   **文档同步**:
+    *   更新 `README.md` 与 `docs/STARTUP_GUIDE.md`，明确局域网访问无需再先手动修改前端 env。
+
+---
+
+## Phase 4.7: Snapshot 首屏加载兜底
+**时间**: 2026-03-22
+**目标**: 避免客户端因 WebSocket 首帧异常而无限停留在 `Syncing room snapshot`。
+
+### 核心产出
+*   **新增 HTTP snapshot 引导接口**:
+    *   后端增加 `GET /api/rooms/{roomId}/snapshot?name=<userName>`，复用房间成员权限校验并返回与 WebSocket 一致的 snapshot 结构。
+*   **前端首屏加载改造**:
+    *   `useRoomSocket` 先通过 HTTP 获取初始 snapshot，再由 WebSocket 持续推送实时更新。
+    *   WebSocket 建连失败时不再无限 loading，而是保留已加载快照并提示正在重连。
+*   **协议与文档同步**:
+    *   更新 `docs/EVENT_PROTOCOL.md`、`README.md`、`docs/STARTUP_GUIDE.md`，补充 snapshot bootstrap 说明。
+
+---
+
+## Phase 4.8: Quest Room 集成测试补齐
+**时间**: 2026-03-23
+**目标**: 为新版固定房间链路建立可回归的后端集成测试，覆盖首屏、实时同步与 GP 流水。
+
+### 核心产出
+*   **新增真实 app 集成测试**:
+    *   使用 `TestClient` + 临时 SQLite 数据库启动完整 FastAPI app，避免依赖手工启动服务。
+*   **覆盖关键回归链路**:
+    *   进入房间 `POST /api/rooms/access`
+    *   HTTP snapshot 首屏 `GET /api/rooms/{roomId}/snapshot`
+    *   WebSocket 连接、断开、重连后的在线态变化
+    *   Auto Quest 创建后按当天星期自动生成任务实例
+    *   完成任务后写入 GP 流水
+    *   取消完成后回滚 GP 流水
+*   **测试依赖补齐**:
+    *   为后端测试依赖补充 `httpx`，支持 `fastapi.testclient` 在当前虚拟环境中运行。
