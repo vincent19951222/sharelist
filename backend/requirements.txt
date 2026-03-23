@@ -11,3 +11,4 @@ alembic
 bleach
 greenlet
 pytest
+httpx

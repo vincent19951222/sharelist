@@ -254,3 +254,22 @@
     *   WebSocket 建连失败时不再无限 loading，而是保留已加载快照并提示正在重连。
 *   **协议与文档同步**:
     *   更新 `docs/EVENT_PROTOCOL.md`、`README.md`、`docs/STARTUP_GUIDE.md`，补充 snapshot bootstrap 说明。
+
+---
+
+## Phase 4.8: Quest Room 集成测试补齐
+**时间**: 2026-03-23
+**目标**: 为新版固定房间链路建立可回归的后端集成测试，覆盖首屏、实时同步与 GP 流水。
+
+### 核心产出
+*   **新增真实 app 集成测试**:
+    *   使用 `TestClient` + 临时 SQLite 数据库启动完整 FastAPI app，避免依赖手工启动服务。
+*   **覆盖关键回归链路**:
+    *   进入房间 `POST /api/rooms/access`
+    *   HTTP snapshot 首屏 `GET /api/rooms/{roomId}/snapshot`
+    *   WebSocket 连接、断开、重连后的在线态变化
+    *   Auto Quest 创建后按当天星期自动生成任务实例
+    *   完成任务后写入 GP 流水
+    *   取消完成后回滚 GP 流水
+*   **测试依赖补齐**:
+    *   为后端测试依赖补充 `httpx`，支持 `fastapi.testclient` 在当前虚拟环境中运行。
